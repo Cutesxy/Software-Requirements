@@ -361,6 +361,7 @@ export default {
         backgroundColor: 'transparent',
         tooltip: {
           formatter: (params) => {
+            if (!params.data || !Array.isArray(params.data)) return ''
             const [hour, spread, profit, confidence] = params.data
             return `时间: ${hour}:00<br/>价差: ${spread.toFixed(2)}<br/>收益: ${profit.toFixed(2)}<br/>置信度: ${(confidence * 100).toFixed(0)}%`
           },

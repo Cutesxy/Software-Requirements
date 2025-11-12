@@ -351,6 +351,7 @@ export default {
           borderColor: '#e5e7eb',
           textStyle: { color: '#111827' },
           formatter: (params) => {
+            if (!params.data || !Array.isArray(params.data)) return ''
             const [hour, minute, value] = params.data
             return `时间: ${hour}:${minute}<br/>Z-Score: ${value.toFixed(2)}`
           }

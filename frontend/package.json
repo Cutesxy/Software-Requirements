@@ -1,0 +1,26 @@
+{
+  "name": "non-atomic-arbitrage-radar",
+  "version": "1.0.0",
+  "description": "区块链非原子套利识别平台",
+  "scripts": {
+    "dev": "vue-cli-service serve",
+    "build": "vue-cli-service build",
+    "lint": "vue-cli-service lint"
+  },
+  "dependencies": {
+    "vue": "^2.6.14",
+    "vue-router": "^3.5.3",
+    "vuex": "^3.6.2",
+    "echarts": "^5.4.3",
+    "axios": "^1.4.0",
+    "dayjs": "^1.11.9",
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@vue/cli-service": "^5.0.8",
+    "vue-template-compiler": "^2.6.14",
+    "sass": "^1.63.6",
+    "sass-loader": "^13.3.2"
+  }
+}
+

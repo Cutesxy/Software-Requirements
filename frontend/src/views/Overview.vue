@@ -15,6 +15,11 @@
               <option value="month">9月全月</option>
               <option value="custom">自定义</option>
             </select>
+            <div v-if="timePreset === 'custom'" class="custom-range">
+              <button class="btn btn-secondary w-full" @click="toggleCustomPicker">
+                {{ customRangeLabel }}
+              </button>
+            </div>
           </div>
           
           <div class="param-section">
@@ -76,6 +81,29 @@
           </div>
         </div>
       </aside>
+      
+      <div
+        v-if="timePreset === 'custom' && showCustomPicker"
+        class="date-popover-backdrop"
+        @click.self="cancelCustomRange"
+      >
+        <div class="date-popover">
+          <div class="popover-header">
+            <span>选择自定义日期</span>
+            <button class="btn-icon" @click="cancelCustomRange">×</button>
+          </div>
+          <div class="popover-body">
+            <label class="param-label">开始日期</label>
+            <input type="date" class="input" v-model="tempRange.start" />
+            <label class="param-label" style="margin-top: 12px;">结束日期</label>
+            <input type="date" class="input" v-model="tempRange.end" />
+          </div>
+          <div class="popover-actions">
+            <button class="btn btn-secondary" @click="cancelCustomRange">取消</button>
+            <button class="btn btn-primary" @click="confirmCustomRange">应用</button>
+          </div>
+        </div>
+      </div>
       
       <!-- 右侧主图表区 -->
       <main class="main-content col-span-9">
@@ -148,6 +176,28 @@
 import { mapState, mapActions } from 'vuex'
 import ChartCard from '@/components/ChartCard.vue'
 
+const formatDateInput = (date) => {
+  const tzOffset = date.getTimezoneOffset()
+  const localDate = new Date(date.getTime() - tzOffset * 60000)
+  return localDate.toISOString().split('T')[0]
+}
+
+const createPresetRange = (preset) => {
+  const end = new Date()
+  let start = new Date(end)
+
+  if (preset === 'week') {
+    start.setDate(end.getDate() - 6)
+  } else {
+    start = new Date(end.getFullYear(), end.getMonth(), 1)
+  }
+
+  return {
+    start: formatDateInput(start),
+    end: formatDateInput(end)
+  }
+}
+
 export default {
   name: 'Overview',
   
@@ -170,12 +220,20 @@ export default {
         signalCount: 0,
         avgSpread: '0.00',
         totalProfit: '0.00'
-      }
+      },
+      showCustomPicker: false,
+      customRange: createPresetRange('month'),
+      tempRange: { ...createPresetRange('month') }
     }
   },
   
   computed: {
     ...mapState(['priceData', 'spreadData', 'signals']),
+
+    customRangeLabel() {
+      if (!this.customRange) return '选择日期范围'
+      return `${this.customRange.start} 至 ${this.customRange.end}`
+    },
     
     priceCompareOptions() {
       if (!this.priceData) return {}
@@ -408,7 +466,7 @@ export default {
   },
   
   methods: {
-    ...mapActions(['loadPriceData', 'loadSpreadData', 'detectSignals']),
+    ...mapActions(['loadPriceData', 'loadSpreadData', 'detectSignals', 'updateConfig']),
     
     async loadData() {
       this.loading = true
@@ -431,8 +489,60 @@ export default {
     },
     
     onTimeRangeChange() {
-      // 时间范围变化处理
+      if (this.timePreset === 'custom') {
+        this.tempRange = { ...this.customRange }
+        this.showCustomPicker = true
+        return
+      }
+
+      const presetRange = createPresetRange(this.timePreset)
+      this.customRange = { ...presetRange }
+      this.applyTimeRange(presetRange)
+    },
+
+    applyTimeRange(range) {
+      if (!range || !range.start || !range.end) return
+      const startTime = new Date(range.start).getTime()
+      const endTime = new Date(range.end).getTime()
+
+      if (Number.isNaN(startTime) || Number.isNaN(endTime)) {
+        alert('请选择有效的日期')
+        return
+      }
+
+      if (startTime > endTime) {
+        alert('开始日期不能晚于结束日期')
+        return
+      }
+
+      this.updateConfig({
+        timeRange: {
+          start: startTime,
+          end: endTime
+        }
+      })
       this.loadData()
+    },
+
+    toggleCustomPicker() {
+      this.tempRange = { ...this.customRange }
+      this.showCustomPicker = !this.showCustomPicker
+    },
+
+    confirmCustomRange() {
+      if (!this.tempRange.start || !this.tempRange.end) {
+        alert('请完整选择开始和结束日期')
+        return
+      }
+
+      this.customRange = { ...this.tempRange }
+      this.showCustomPicker = false
+      this.applyTimeRange(this.customRange)
+    },
+
+    cancelCustomRange() {
+      this.showCustomPicker = false
+      this.tempRange = { ...this.customRange }
     },
     
     toggleLogScale() {
@@ -536,6 +646,54 @@ export default {
 
 .w-full {
   width: 100%;
+}
+
+.custom-range {
+  position: relative;
+  margin-top: 12px;
+}
+
+.date-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40000;
+  padding: 16px;
+}
+
+.date-popover {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
+  width: 320px;
+  max-width: 100%;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+  z-index: 4001;
+}
+
+.popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  font-weight: 600;
+  color: $text-primary;
+}
+
+.popover-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
 }
 
 .header-actions {

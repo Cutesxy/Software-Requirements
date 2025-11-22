@@ -2,9 +2,13 @@ from datetime import datetime
 
 # MySQL 连接字符串 (SQLAlchemy 格式)
 # 示例: mysql+pymysql://username:password@127.0.0.1:3306/dbname
-MYSQL_URI = "mysql+pymysql://root:Mysql19491001@127.0.0.1:3306/txdata?charset=utf8mb4"
+MYSQL_URI = "mysql+pymysql://root:huxinyu20040823@127.0.0.1:3306/txdata?charset=utf8mb4"
 
-# Uniswap 子图 API (The Graph)
+# # Uniswap 子图 API (The Graph)
+# TODO endpoint is removed, update to use Dune Analytics API in get_data.py
+# Dune Analytics API endpoint
+# API_URL = "https://api.dune.com/api/v1/query/execute"
+# API_KEY = "4Vg7XCgBeXvWBoowfRKXmnXZnv85m7dx"
 UNISWAP_SUBGRAPH_URL = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3"
 
 # 请在此填入要分析的 Uniswap V3 池地址（小写 hex），例如 USDT/ETH 池地址

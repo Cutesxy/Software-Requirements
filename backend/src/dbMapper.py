@@ -1,14 +1,13 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, BigInteger, Numeric, JSON
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, BigInteger, Numeric, JSON, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 import pandas as pd
 import config
 
 Base = declarative_base()
 
-# 新增 ORM 映射，匹配 init.sql 中的表结构
 class UniswapSwap(Base):
     __tablename__ = 'uniswap_swaps'
-
+    
     id = Column(String(128), primary_key=True)
     pool_address = Column(String(66), nullable=False)
     timestamp = Column(Integer, nullable=False)           # epoch seconds
@@ -78,17 +77,7 @@ class DBMapper:
         创建表结构（如果不存在）。在程序启动时调用一次。
         """
         Base.metadata.create_all(self.engine)
-        # 清空两张表
-        session = self.SessionLocal()
-        try:
-            session.query(UniswapSwap).delete()
-            session.query(BinanceKline).delete()
-            session.commit()
-        except Exception as e:
-            session.rollback()
-            print(f"Error clearing tables during init_db: {e}")
-        finally:
-            session.close()
+        print("数据库表结构初始化完成")
 
     def store_uniswap_swap(self, swap_data):
         """
@@ -170,3 +159,119 @@ class DBMapper:
             return []
         finally:
             session.close()
+
+    def create_merged_trading_data(self):
+        """创建合并的交易数据"""
+        try:
+            with self.engine.connect() as connection:
+                # 使用事务
+                with connection.begin():
+                    # 首先清空表
+                    connection.execute(text("TRUNCATE TABLE merged_trading_data"))
+                    
+                    # 使用 SQL 进行时间对齐和聚合
+                    merge_sql = text("""
+                    INSERT INTO merged_trading_data (
+                        time_bucket, timestamp,
+                        uniswap_swap_count, uniswap_total_volume_eth, uniswap_total_volume_usdt,
+                        uniswap_avg_price, uniswap_min_price, uniswap_max_price, uniswap_price_std,
+                        binance_open, binance_high, binance_low, binance_close, 
+                        binance_volume, binance_quote_volume, binance_trades,
+                        price_difference, price_ratio
+                    )
+                    SELECT 
+                        -- 时间桶（按分钟对齐）
+                        FROM_UNIXTIME(FLOOR(COALESCE(us.timestamp, bk.open_time_ms / 1000) / 60) * 60) as time_bucket,
+                        FLOOR(COALESCE(us.timestamp, bk.open_time_ms / 1000) / 60) * 60 as timestamp,
+                        
+                        -- Uniswap 数据聚合
+                        COALESCE(us.swap_count, 0) as uniswap_swap_count,
+                        COALESCE(us.total_volume_eth, 0) as uniswap_total_volume_eth,
+                        COALESCE(us.total_volume_usdt, 0) as uniswap_total_volume_usdt,
+                        us.avg_price as uniswap_avg_price,
+                        us.min_price as uniswap_min_price,
+                        us.max_price as uniswap_max_price,
+                        us.price_std as uniswap_price_std,
+                        
+                        -- Binance 数据
+                        bk.open as binance_open,
+                        bk.high as binance_high,
+                        bk.low as binance_low,
+                        bk.close as binance_close,
+                        bk.volume as binance_volume,
+                        bk.quote_av as binance_quote_volume,
+                        bk.trades as binance_trades,
+                        
+                        -- 价格差异指标
+                        (us.avg_price - bk.close) as price_difference,
+                        (us.avg_price / bk.close) as price_ratio
+                        
+                    FROM (
+                        -- Binance K线数据（按分钟）
+                        SELECT 
+                            FROM_UNIXTIME(FLOOR(open_time_ms / 1000 / 60) * 60) as time_bucket,
+                            FLOOR(open_time_ms / 1000 / 60) * 60 as timestamp,
+                            open, high, low, close, volume, quote_av, trades
+                        FROM binance_klines 
+                        WHERE symbol = 'ETHUSDT'
+                    ) bk
+                    
+                    LEFT JOIN (
+                        -- Uniswap Swap 数据聚合（按分钟）
+                        SELECT 
+                            FROM_UNIXTIME(FLOOR(timestamp / 60) * 60) as time_bucket,
+                            FLOOR(timestamp / 60) * 60 as timestamp,
+                            COUNT(*) as swap_count,
+                            SUM(CASE WHEN amount0 > 0 THEN amount0 ELSE -amount0 END) as total_volume_eth,
+                            SUM(CASE WHEN amount1 > 0 THEN amount1 ELSE -amount1 END) as total_volume_usdt,
+                            AVG(price) as avg_price,
+                            MIN(price) as min_price,
+                            MAX(price) as max_price,
+                            STDDEV(price) as price_std
+                        FROM uniswap_swaps 
+                        WHERE pool_address = :pool_address
+                        GROUP BY FLOOR(timestamp / 60) * 60
+                    ) us ON bk.time_bucket = us.time_bucket
+                    
+                    ORDER BY time_bucket
+                    """)
+                    
+                    connection.execute(merge_sql, {'pool_address': config.POOL_ADDRESS.lower()})
+            
+            print("合并交易数据创建完成")
+            return True
+            
+        except Exception as e:
+            print(f"创建合并交易数据时出错: {e}")
+            return False
+
+    def get_merged_data_stats(self):
+        """获取合并数据的统计信息"""
+        try:
+            with self.engine.connect() as connection:
+                stats_sql = text("""
+                SELECT 
+                    COUNT(*) as total_records,
+                    MIN(time_bucket) as start_time,
+                    MAX(time_bucket) as end_time,
+                    AVG(uniswap_swap_count) as avg_swaps_per_minute,
+                    AVG(price_difference) as avg_price_diff,
+                    AVG(price_ratio) as avg_price_ratio
+                FROM merged_trading_data
+                """)
+                
+                result = connection.execute(stats_sql).fetchone()
+                
+                if result:
+                    print(f"合并数据统计:")
+                    print(f"  总记录数: {result[0]}")
+                    print(f"  时间范围: {result[1]} 到 {result[2]}")
+                    print(f"  每分钟平均swap数量: {float(result[3] or 0):.2f}")
+                    print(f"  平均价格差异: {float(result[4] or 0):.4f}")
+                    print(f"  平均价格比率: {float(result[5] or 0):.4f}")
+                
+                return result
+                
+        except Exception as e:
+            print(f"获取合并数据统计时出错: {e}")
+            return None

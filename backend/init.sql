@@ -19,12 +19,15 @@ CREATE TABLE IF NOT EXISTS `uniswap_swaps` (
   `ts` DATETIME(6) NOT NULL,                /* timestamp as datetime (UTC) */
   `amount0` DECIMAL(38,18) DEFAULT NULL,
   `amount1` DECIMAL(38,18) DEFAULT NULL,
+  `price` DECIMAL(38,18) DEFAULT NULL,      /* 计算出的价格 (USDT per ETH) */
   `sqrtPriceX96` VARCHAR(80) DEFAULT NULL,
   `tick` INT DEFAULT NULL,
   `tx_hash` VARCHAR(128) DEFAULT NULL,
   `raw` JSON DEFAULT NULL,
   PRIMARY KEY (`id`),
-  INDEX `idx_pool_ts` (`pool_address`, `ts`)
+  INDEX `idx_pool_ts` (`pool_address`, `ts`),
+  INDEX `idx_timestamp` (`timestamp`),
+  INDEX `idx_price` (`price`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
@@ -45,7 +48,81 @@ CREATE TABLE IF NOT EXISTS `binance_klines` (
   `trades` INT DEFAULT NULL,
   `raw` JSON DEFAULT NULL,
   PRIMARY KEY (`symbol`, `open_time_ms`),
-  INDEX `idx_symbol_open_time` (`symbol`, `open_time`)
+  INDEX `idx_symbol_open_time` (`symbol`, `open_time`),
+  INDEX `idx_open_time_ms` (`open_time_ms`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- Table: merged_trading_data
+-- 合并的分钟级交易数据，时间戳对齐
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS `merged_trading_data`;
+CREATE TABLE IF NOT EXISTS `merged_trading_data` (
+  `time_bucket` DATETIME NOT NULL,           /* 分钟级时间桶，例如: 2024-01-01 10:00:00 */
+  `timestamp` INT UNSIGNED NOT NULL,         /* 对应的 Unix 时间戳 */
+  
+  /* Uniswap 数据 */
+  `uniswap_swap_count` INT DEFAULT 0,        /* 该分钟内的 swap 数量 */
+  `uniswap_total_volume_eth` DECIMAL(38,18) DEFAULT 0,  /* 该分钟内 ETH 总交易量 */
+  `uniswap_total_volume_usdt` DECIMAL(38,18) DEFAULT 0, /* 该分钟内 USDT 总交易量 */
+  `uniswap_avg_price` DECIMAL(38,18) DEFAULT NULL,      /* 该分钟内平均价格 */
+  `uniswap_min_price` DECIMAL(38,18) DEFAULT NULL,      /* 该分钟内最低价格 */
+  `uniswap_max_price` DECIMAL(38,18) DEFAULT NULL,      /* 该分钟内最高价格 */
+  `uniswap_price_std` DECIMAL(38,18) DEFAULT NULL,      /* 价格标准差 */
+  
+  /* Binance 数据 */
+  `binance_open` DECIMAL(38,18) DEFAULT NULL,           /* Binance 开盘价 */
+  `binance_high` DECIMAL(38,18) DEFAULT NULL,           /* Binance 最高价 */
+  `binance_low` DECIMAL(38,18) DEFAULT NULL,            /* Binance 最低价 */
+  `binance_close` DECIMAL(38,18) DEFAULT NULL,          /* Binance 收盘价 */
+  `binance_volume` DECIMAL(38,18) DEFAULT NULL,         /* Binance 成交量 */
+  `binance_quote_volume` DECIMAL(38,18) DEFAULT NULL,   /* Binance 报价资产成交量 */
+  `binance_trades` INT DEFAULT NULL,                    /* Binance 成交笔数 */
+  
+  /* 价格差异指标 */
+  `price_difference` DECIMAL(38,18) DEFAULT NULL,       /* Uniswap平均价 - Binance收盘价 */
+  `price_ratio` DECIMAL(38,18) DEFAULT NULL,            /* Uniswap平均价 / Binance收盘价 */
+  
+  PRIMARY KEY (`time_bucket`),
+  INDEX `idx_timestamp` (`timestamp`),
+  INDEX `idx_time_bucket` (`time_bucket`),
+  INDEX `idx_uniswap_swap_count` (`uniswap_swap_count`),
+  INDEX `idx_price_difference` (`price_difference`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建用于数据质量检查的视图
+CREATE OR REPLACE VIEW data_quality_view AS
+SELECT 
+    'uniswap_swaps' as table_name,
+    COUNT(*) as record_count,
+    MIN(ts) as min_timestamp,
+    MAX(ts) as max_timestamp,
+    COUNT(DISTINCT DATE(ts)) as active_days,
+    AVG(ABS(amount0)) as avg_eth_volume,
+    AVG(ABS(amount1)) as avg_usdt_volume,
+    AVG(price) as avg_price
+FROM uniswap_swaps
+UNION ALL
+SELECT 
+    'binance_klines' as table_name,
+    COUNT(*) as record_count,
+    MIN(open_time) as min_timestamp,
+    MAX(open_time) as max_timestamp,
+    COUNT(DISTINCT DATE(open_time)) as active_days,
+    NULL as avg_eth_volume,
+    NULL as avg_usdt_volume,
+    AVG(close) as avg_price
+FROM binance_klines
+UNION ALL
+SELECT 
+    'merged_trading_data' as table_name,
+    COUNT(*) as record_count,
+    MIN(time_bucket) as min_timestamp,
+    MAX(time_bucket) as max_timestamp,
+    COUNT(DISTINCT DATE(time_bucket)) as active_days,
+    AVG(uniswap_total_volume_eth) as avg_eth_volume,
+    AVG(uniswap_total_volume_usdt) as avg_usdt_volume,
+    AVG(uniswap_avg_price) as avg_price
+FROM merged_trading_data;
 
 -- End of init.sql

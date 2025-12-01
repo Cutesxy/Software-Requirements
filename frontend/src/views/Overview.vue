@@ -60,7 +60,7 @@
               交易对
               <span class="param-tooltip" title="当前分析的加密货币交易对，默认USDT/ETH">ℹ️</span>
             </label>
-            <input type="text" class="input" value="USDT/ETH" disabled />
+            <input type="text" class="input" value="ETH/USDT" disabled />
           </div>
 
           <div class="param-section">
@@ -78,12 +78,12 @@
           <div class="param-section">
             <label class="param-label">
               CEX交易所
-              <span class="param-tooltip" title="选择作为价格基准的中心化交易所，提供最优报价和成交量数据">ℹ️</span>
+              <span class="param-tooltip" title="Binance根据VIP等级和BNB抵扣有不同的手续费率">ℹ️</span>
             </label>
             <select v-model="cexExchange" class="input" @change="onCexExchangeChange">
-              <option>Binance</option>
-              <option>OKX</option>
-              <option>Coinbase</option>
+              <option>Binance (0.1%)</option>
+              <option>Binance (0.075%)</option>
+              <option>Binance (0.05%)</option>
             </select>
           </div>
           
@@ -386,7 +386,7 @@ export default {
     return {
       loading: false,
       dexPool: 'Uniswap V3 (0.3%)',
-      cexExchange: 'Binance',
+      cexExchange: 'Binance (0.1%)',
       logScale: false,
       showRadar: true,
       showPie: true,
@@ -455,8 +455,8 @@ export default {
     priceCompareOptions() {
       if (!this.priceData) return null
 
-      const cexData = this.priceData.cex.map(d => [d.t, d.p])
       const dexData = this.priceData.dex.map(d => [d.t, d.p])
+      const cexData = this.priceData.cex.map(d => [d.t, d.p])
 
       // 计算时间范围，用于动态调整横坐标显示格式
       const allData = [...cexData, ...dexData]
@@ -522,7 +522,7 @@ export default {
           {
             name: 'Uniswap V3',
             type: 'line',
-            data: cexData,
+            data: dexData,
             symbol: 'none',
             lineStyle: { color: '#3b82f6', width: 2 },
             areaStyle: {
@@ -540,7 +540,7 @@ export default {
           {
             name: 'Binance',
             type: 'line',
-            data: dexData,
+            data: cexData,
             symbol: 'none',
             lineStyle: { color: '#10b981', width: 2 },
             areaStyle: {
@@ -560,12 +560,36 @@ export default {
     },
     
     radarOptions() {
+      if (!this.signals || this.signals.length === 0) return null
+
+      // 计算雷达图指标 (0-10 分)
+      // 1. 价差幅度: 平均价差 / 平均价格 * 100 (basis points)
+      const avgSpread = this.signals.reduce((sum, s) => sum + Math.abs(s.spread), 0) / this.signals.length
+      const avgPrice = this.signals.reduce((sum, s) => sum + (s.cexPrice + s.dexPrice)/2, 0) / this.signals.length
+      const spreadScore = Math.min(10, (avgSpread / avgPrice) * 1000) // 假设1%价差(100bps)为满分
+
+      // 2. 平均套利: 平均净利润
+      const avgProfit = this.signals.reduce((sum, s) => sum + s.netProfit, 0) / this.signals.length
+      const profitScore = Math.min(10, avgProfit / 10) // 假设平均100U利润为满分
+
+      // 3. 交易频率: 信号数量 / 天数 (假设30天)
+      const frequencyScore = Math.min(10, this.signals.length / 30 / 2) // 假设每天20个信号为满分
+
+      // 4. 潜在利润: 总净利润 (对数刻度)
+      const totalProfit = this.signals.reduce((sum, s) => sum + s.netProfit, 0)
+      const totalProfitScore = Math.min(10, Math.log10(totalProfit > 0 ? totalProfit : 1) * 1.5)
+
+      // 5. 市场波动: 暂时用价差标准差代替
+      const spreadVariance = this.signals.reduce((sum, s) => sum + Math.pow(Math.abs(s.spread) - avgSpread, 2), 0) / this.signals.length
+      const spreadStdDev = Math.sqrt(spreadVariance)
+      const volatilityScore = Math.min(10, spreadStdDev / 5) 
+
       const radarData = [
-        { metric: '价差幅度', value: 10 },
-        { metric: '平均套利', value: 7 },
-        { metric: '交易频率', value: 8 },
-        { metric: '潜在利润', value: 6 },
-        { metric: '市场波动', value: 9 }
+        { metric: '价差幅度', value: parseFloat(spreadScore.toFixed(1)) },
+        { metric: '平均套利', value: parseFloat(profitScore.toFixed(1)) },
+        { metric: '交易频率', value: parseFloat(frequencyScore.toFixed(1)) },
+        { metric: '潜在利润', value: parseFloat(totalProfitScore.toFixed(1)) },
+        { metric: '市场波动', value: parseFloat(volatilityScore.toFixed(1)) }
       ]
 
       return {
@@ -1227,12 +1251,42 @@ export default {
     
     
     onDexPoolChange() {
-      // DEX池变化时的处理逻辑
+      // 从选项中提取费率 "Uniswap V3 (0.3%)" -> 0.003
+      const match = this.dexPool.match(/\(([\d.]+)%\)/)
+      if (match) {
+        const feePercent = parseFloat(match[1])
+        const feeRate = feePercent / 100
+        console.log('Updating DEX fee to:', feeRate)
+        this.updateConfig({
+          detector: {
+            ...this.$store.state.config.detector,
+            fees: {
+              ...this.$store.state.config.detector.fees,
+              dex: feeRate
+            }
+          }
+        })
+      }
       this.loadData()
     },
 
     onCexExchangeChange() {
-      // CEX交易所变化时的处理逻辑
+      // 从选项中提取费率 "Binance (0.1%)" -> 0.001
+      const match = this.cexExchange.match(/\(([\d.]+)%\)/)
+      if (match) {
+        const feePercent = parseFloat(match[1])
+        const feeRate = feePercent / 100
+        console.log('Updating CEX fee to:', feeRate)
+        this.updateConfig({
+          detector: {
+            ...this.$store.state.config.detector,
+            fees: {
+              ...this.$store.state.config.detector.fees,
+              cex: feeRate
+            }
+          }
+        })
+      }
       this.loadData()
     },
 

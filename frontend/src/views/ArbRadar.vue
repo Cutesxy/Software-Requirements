@@ -387,7 +387,7 @@ export default {
       if (!this.signals || this.signals.length === 0) return {}
       
       const data = this.signals.map(s => [
-        new Date(s.time).getHours(),
+        s.time, // X axis: Full timestamp
         Math.abs(s.spread),
         s.netProfit,
         s.confidence
@@ -398,21 +398,28 @@ export default {
         tooltip: {
           formatter: (params) => {
             if (!params.data || !Array.isArray(params.data)) return ''
-            const [hour, spread, profit, confidence] = params.data
-            return `时间: ${hour}:00<br/>价差: ${spread.toFixed(2)}<br/>收益: ${profit.toFixed(2)}<br/>置信度: ${(confidence * 100).toFixed(0)}%`
+            const [time, spread, profit, confidence] = params.data
+            const date = new Date(time)
+            const timeStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`
+            return `时间: ${timeStr}<br/>价差: ${spread.toFixed(2)}<br/>收益: ${profit.toFixed(2)}<br/>置信度: ${(confidence * 100).toFixed(0)}%`
           },
           backgroundColor: 'rgba(255, 255, 255, 0.95)',
           borderColor: '#e5e7eb',
           textStyle: { color: '#111827' }
         },
         xAxis: {
-          name: '时间 (小时)',
+          type: 'time', // Change to time axis
+          name: '时间',
           nameTextStyle: { color: '#6b7280' },
-          axisLabel: { color: '#6b7280' },
+          axisLabel: { 
+            color: '#6b7280',
+            formatter: (value) => {
+              const date = new Date(value)
+              return `${date.getMonth()+1}/${date.getDate()}\n${date.getHours()}:00`
+            }
+          },
           axisLine: { lineStyle: { color: '#e5e7eb' } },
-          splitLine: { lineStyle: { color: '#f3f4f6' } },
-          min: 0,
-          max: 24
+          splitLine: { lineStyle: { color: '#f3f4f6' } }
         },
         yAxis: {
           name: '价差 (USDT)',
@@ -428,7 +435,7 @@ export default {
           orient: 'vertical',
           right: 10,
           top: 'center',
-          text: ['高', '低'],
+          text: ['高收益', '低收益'],
           calculable: true,
           inRange: {
             color: ['#f97316', '#3b82f6', '#10b981']
@@ -452,6 +459,12 @@ export default {
   },
   
   created() {
+    // 从Store同步当前的检测器参数
+    const storeParams = this.$store.state.config.detector
+    if (storeParams) {
+      // 使用深度克隆避免引用问题
+      this.detectorParams = JSON.parse(JSON.stringify(storeParams))
+    }
     this.detectSignals()
   },
   

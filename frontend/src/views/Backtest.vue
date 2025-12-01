@@ -29,12 +29,12 @@
 <script>
 import ChartCard from '@/components/ChartCard.vue'
 import StatCard from '@/components/StatCard.vue'
-import mockData from '@/utils/mockData'
+import { mapState } from 'vuex'
 
 export default {
   name: 'Backtest',
   components: { ChartCard, StatCard },
-  
+
   data() {
     return {
       loading: false,
@@ -47,13 +47,15 @@ export default {
       }
     }
   },
-  
+
   computed: {
+    ...mapState(['signals']),
+
     equityCurveOptions() {
       if (!this.results.equity || this.results.equity.length === 0) return {}
-      
+
       const data = this.results.equity.map(e => [e.time, e.equity])
-      
+
       return {
         tooltip: { trigger: 'axis' },
         xAxis: { type: 'time', axisLabel: { color: '#9BA5B8' } },
@@ -82,15 +84,75 @@ export default {
     runBacktest() {
       this.loading = true
       setTimeout(() => {
-        this.results = mockData.generateBacktestResults({
-          priceThreshold: 0.8,
-          zScoreThreshold: 2.0,
-          timeWindow: [1, 20],
-          volumeMin: 1000,
-          fees: { cex: 0.001, dex: 0.003, gas: 15, slippage: 0.002 }
-        })
+        // 使用真实的信号数据进行回测分析
+        if (this.signals && this.signals.length > 0) {
+          this.results = this.calculateBacktestResults(this.signals)
+        } else {
+          console.warn('No signal data available for backtest')
+          this.results = {
+            totalTrades: 0,
+            winningTrades: 0,
+            winRate: 0,
+            totalProfit: 0,
+            avgProfit: 0,
+            maxDrawdown: 0,
+            sharpeRatio: 0,
+            equity: [],
+            signals: []
+          }
+        }
         this.loading = false
       }, 1000)
+    },
+
+    calculateBacktestResults(signals) {
+      // 计算统计指标
+      const totalTrades = signals.length
+      const winningTrades = signals.filter(s => s.netProfit > 0).length
+      const totalProfit = signals.reduce((sum, s) => sum + s.netProfit, 0)
+      const avgProfit = totalProfit / totalTrades
+      const winRate = winningTrades / totalTrades
+
+      // 生成权益曲线
+      const equity = []
+      let cumProfit = 100000 // 初始资金
+      signals.forEach(s => {
+        cumProfit += s.netProfit
+        equity.push({ time: s.time, equity: cumProfit })
+      })
+
+      // 计算最大回撤
+      let maxDrawdown = 0
+      let peak = equity[0]?.equity || 0
+      equity.forEach(e => {
+        if (e.equity > peak) peak = e.equity
+        const drawdown = (peak - e.equity) / peak
+        if (drawdown > maxDrawdown) maxDrawdown = drawdown
+      })
+
+      // 计算夏普比率（简化）
+      const returns = []
+      for (let i = 1; i < equity.length; i++) {
+        const ret = (equity[i].equity - equity[i-1].equity) / equity[i-1].equity
+        returns.push(ret)
+      }
+      const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length
+      const stdReturn = Math.sqrt(
+        returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length
+      )
+      const sharpeRatio = stdReturn > 0 ? (avgReturn / stdReturn) * Math.sqrt(252) : 0
+
+      return {
+        totalTrades,
+        winningTrades,
+        winRate,
+        totalProfit,
+        avgProfit,
+        maxDrawdown,
+        sharpeRatio,
+        equity,
+        signals
+      }
     }
   },
   

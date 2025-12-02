@@ -138,8 +138,8 @@
       <!-- 中间：实时数据流可视化 -->
       <main class="data-visualization">
         <!-- 时间桶列表 -->
-        <div class="card">
-          <div class="card-header">
+        <div class="card" ref="middleCard">
+          <div class="card-header" ref="middleCardHeader">
             <h3>时间桶数据流</h3>
             <div class="header-actions">
               <span v-if="totalBuckets > 0" class="status-badge">
@@ -150,7 +150,10 @@
               </span>
             </div>
             </div>
-          <div class="time-buckets-container">
+          <div 
+            class="time-buckets-container"
+            :style="{ maxHeight: containerMaxHeight + 'px' }"
+          >
             <div v-if="timeBuckets.length === 0 && !isRunning" class="empty-state">
               <div class="empty-icon">📊</div>
               <div class="empty-text">点击"开始分析"查看算法执行过程</div>
@@ -283,7 +286,7 @@
       </main>
 
       <!-- 右侧：统计面板 -->
-      <aside class="statistics-panel">
+      <aside class="statistics-panel" ref="statsPanel">
         <div class="card">
           <div class="card-header">
             <h3>实时统计</h3>
@@ -389,6 +392,7 @@ export default {
 
   data() {
     return {
+      containerMaxHeight: 800, // 默认高度
       // 算法参数
       algorithmParams: {
         profitThreshold: 10.0,
@@ -432,6 +436,25 @@ export default {
       ]
     }
   },
+
+  mounted() {
+    this.updateMaxHeight()
+    window.addEventListener('resize', this.updateMaxHeight)
+    // 使用 ResizeObserver 监听右侧面板高度变化
+    this.resizeObserver = new ResizeObserver(this.updateMaxHeight)
+    if (this.$refs.statsPanel) {
+      this.resizeObserver.observe(this.$refs.statsPanel)
+    }
+  },
+
+  beforeDestroy() {
+    window.removeEventListener('resize', this.updateMaxHeight)
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect()
+    }
+  },
+
+
 
   computed: {
     progressPercentage() {
@@ -478,15 +501,35 @@ export default {
           trigger: 'item',
           formatter: '{b}: {c} USDT ({d}%)'
         },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
         series: [{
             type: 'pie',
-          radius: ['40%', '70%'],
+            radius: ['40%', '60%'],
+            center: ['50%', '40%'],
+            avoidLabelOverlap: false,
+            itemStyle: {
+              borderRadius: 10,
+              borderColor: '#fff',
+              borderWidth: 2
+            },
+            label: {
+              show: false,
+              position: 'center'
+            },
             data: [
             { value: binanceFee.toFixed(2), name: 'Binance手续费' },
             { value: uniswapFee.toFixed(2), name: 'Uniswap手续费' },
             { value: gasCost.toFixed(2), name: 'Gas成本' }
           ],
           emphasis: {
+            label: {
+              show: true,
+              fontSize: '16',
+              fontWeight: 'bold'
+            },
             itemStyle: {
               shadowBlur: 10,
               shadowOffsetX: 0,
@@ -510,12 +553,28 @@ export default {
           trigger: 'axis',
           axisPointer: { type: 'cross' }
         },
+        grid: {
+          left: '5%',
+          right: '10%',
+          bottom: '5%',
+          containLabel: true
+        },
         legend: {
           data: ['净利润分布', '置信度分布']
         },
         xAxis: {
           type: 'value',
-          name: '数值'
+          name: '数值',
+          axisLabel: {
+            rotate: 0,
+            hideOverlap: true,
+            formatter: function (value) {
+              if (value >= 1000) {
+                return (value / 1000).toFixed(0) + 'k';
+              }
+              return value;
+            }
+          }
         },
         yAxis: {
           type: 'value',
@@ -538,6 +597,27 @@ export default {
   },
   
   methods: {
+    updateMaxHeight() {
+      if (this.$refs.statsPanel && this.$refs.middleCard && this.$refs.middleCardHeader) {
+        // 获取右侧面板的总高度
+        const rightHeight = this.$refs.statsPanel.offsetHeight
+        
+        // 获取中间卡片的样式信息
+        const cardStyle = window.getComputedStyle(this.$refs.middleCard)
+        const cardPaddingY = parseFloat(cardStyle.paddingTop || 0) + parseFloat(cardStyle.paddingBottom || 0)
+        const cardBorderY = parseFloat(cardStyle.borderTopWidth || 0) + parseFloat(cardStyle.borderBottomWidth || 0)
+        
+        // 获取头部的样式信息
+        const headerHeight = this.$refs.middleCardHeader.offsetHeight
+        const headerStyle = window.getComputedStyle(this.$refs.middleCardHeader)
+        const headerMarginBottom = parseFloat(headerStyle.marginBottom || 0)
+        
+        // 计算容器高度：右侧高度 - 卡片内边距 - 卡片边框 - 头部高度 - 头部下边距
+        // 减去 2px 的缓冲值以避免计算误差导致的滚动条
+        this.containerMaxHeight = rightHeight - cardPaddingY - cardBorderY - headerHeight - headerMarginBottom - 2
+      }
+    },
+
     startAnalysis() {
       this.isRunning = true
       this.isPaused = false
@@ -995,6 +1075,7 @@ export default {
   grid-template-columns: 280px 1fr 320px;
   gap: 24px;
   margin-bottom: 24px;
+  align-items: start; /* 关键：防止默认拉伸，让高度由内容决定 */
 
   @media (max-width: 1400px) {
     grid-template-columns: 250px 1fr 280px;

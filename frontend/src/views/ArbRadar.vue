@@ -328,6 +328,7 @@ export default {
       selectedSignal: null,
       selectedPreset: '',
       sortBy: 'profit',
+      detectTimer: null, // 防抖定时器
       
       detectorParams: {
         priceThreshold: 0.8,
@@ -507,13 +508,25 @@ export default {
       // 使用深度克隆避免引用问题
       this.detectorParams = JSON.parse(JSON.stringify(storeParams))
     }
+    // 确保参数同步到 store
+    this.updateDetectorParams(this.detectorParams)
     this.detectSignals()
+  },
+  
+  beforeDestroy() {
+    // 清理定时器
+    if (this.detectTimer) {
+      clearTimeout(this.detectTimer)
+    }
   },
   
   methods: {
     ...mapActions(['detectSignals: detectSignalsAction', 'updateDetectorParams']),
     
     async detectSignals() {
+      // 确保使用最新的参数
+      this.updateDetectorParams(this.detectorParams)
+      
       this.loading = true
       try {
         await this.$store.dispatch('detectSignals')
@@ -525,7 +538,18 @@ export default {
     },
     
     onParamsChange() {
+      // 更新 store 中的参数
       this.updateDetectorParams(this.detectorParams)
+      
+      // 清除之前的定时器
+      if (this.detectTimer) {
+        clearTimeout(this.detectTimer)
+      }
+      
+      // 使用防抖，500ms 后自动重新检测信号
+      this.detectTimer = setTimeout(() => {
+        this.detectSignals()
+      }, 500)
     },
     
     resetParams() {
@@ -541,7 +565,9 @@ export default {
           slippage: 0.002
         }
       }
-      this.onParamsChange()
+      // 更新 store 并立即重新检测
+      this.updateDetectorParams(this.detectorParams)
+      this.detectSignals()
     },
     
     loadPreset() {
@@ -571,7 +597,9 @@ export default {
           ...this.detectorParams,
           ...presets[this.selectedPreset]
         }
-        this.onParamsChange()
+        // 更新 store 并立即重新检测
+        this.updateDetectorParams(this.detectorParams)
+        this.detectSignals()
       }
     },
     

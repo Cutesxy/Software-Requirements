@@ -1,6 +1,6 @@
 import Vue from 'vue'
 import Vuex from 'vuex'
-import csvLoader from '@/utils/csvLoader'
+import processedDataLoader from '@/utils/processedDataLoader'
 
 Vue.use(Vuex)
 
@@ -77,7 +77,7 @@ export default new Vuex.Store({
     async loadPriceData({ commit, state }) {
       commit('SET_LOADING', true)
       try {
-        const rawData = await csvLoader.getRawData(
+        const rawData = await processedDataLoader.getRawData(
           state.config.timeRange.start,
           state.config.timeRange.end
         )
@@ -96,7 +96,7 @@ export default new Vuex.Store({
     async loadSpreadData({ commit, state }) {
       commit('SET_LOADING', true)
       try {
-        const rawData = await csvLoader.getRawData(
+        const rawData = await processedDataLoader.getRawData(
           state.config.timeRange.start,
           state.config.timeRange.end
         )
@@ -115,56 +115,12 @@ export default new Vuex.Store({
     async detectSignals({ commit, state }) {
       commit('SET_LOADING', true)
       try {
-        let signals = await csvLoader.getSignalsInRange(
+        const signals = await processedDataLoader.getSignalsInRange(
           state.config.timeRange.start,
-          state.config.timeRange.end
+          state.config.timeRange.end,
+          state.config.detector
         )
-        
-        // 获取当前费率配置
-        const { fees } = state.config.detector
-        
-        // 重新计算信号的净利润和Z-Score (基于当前费率参数)
-        signals = signals.map(s => {
-          // 1. 计算新的交易成本
-          // 注意：这里为了简化，假设Size是ETH数量，Price是USDT
-          // CEX费用 = 交易额 * CEX费率
-          const cexFee = s.cexPrice * s.size * fees.cex
-          
-          // DEX费用 = 交易额 * DEX费率
-          const dexFee = s.dexPrice * s.size * fees.dex
-          
-          // 滑点成本 = 交易额 * 滑点率
-          const slippageCost = ((s.cexPrice + s.dexPrice) / 2) * s.size * fees.slippage
-          
-          // 总成本 = CEX费用 + DEX费用 + Gas费 + 滑点成本
-          const totalCost = cexFee + dexFee + fees.gas + slippageCost
-          
-          // 2. 计算净利润
-          const netProfit = s.grossProfit - totalCost
-          
-          // 3. 动态计算 Z-Score
-          // 使用价差百分比 * 100 作为 Z-Score 的近似值
-          // 例如 1% 价差 -> Z-Score = 1.0; 5% 价差 -> Z-Score = 5.0
-          const zScore = (Math.abs(s.spread) / ((s.cexPrice + s.dexPrice) / 2)) * 100
-          
-          return {
-            ...s,
-            totalCost,
-            netProfit,
-            zScore
-          }
-        })
 
-        // 根据检测器参数过滤信号
-        const { priceThreshold, zScoreThreshold, volumeMin } = state.config.detector
-        
-        signals = signals.filter(s => {
-          return Math.abs(s.spread) >= priceThreshold &&
-                 Math.abs(s.zScore) >= zScoreThreshold &&
-                 s.size >= volumeMin
-        })
-
-        console.log(`Loaded ${signals.length} real signals from CSV (filtered with dynamic params)`)
         commit('SET_SIGNALS', signals)
         return signals
       } catch (error) {

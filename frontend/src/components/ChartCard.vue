@@ -64,9 +64,19 @@ export default {
       handler(newOptions) {
         if (this.chart && newOptions && Object.keys(newOptions).length > 0) {
           try {
-            this.chart.setOption(newOptions, true)
+            console.log('ChartCard 接收到新配置:', {
+              hasSeries: !!newOptions.series,
+              seriesLength: newOptions.series?.length,
+              seriesNames: newOptions.series?.map(s => s.name),
+              firstSeriesType: newOptions.series?.[0]?.type,
+              firstSeriesDataLength: newOptions.series?.[0]?.data?.length
+            })
+            // 清空后重新设置
+            this.chart.clear()
+            this.chart.setOption(newOptions)
+            console.log('ECharts setOption 完成')
           } catch (error) {
-            console.error('Error setting chart options:', error)
+            console.error('Error setting chart options:', error, newOptions)
           }
         }
       },
@@ -91,14 +101,17 @@ export default {
     initChart() {
       if (!this.$refs.chart) return
 
-      this.chart = echarts.init(this.$refs.chart)
+      this.chart = echarts.init(this.$refs.chart, null, {
+        renderer: 'canvas',
+        useDirtyRect: false
+      })
 
       // 总是设置默认选项
       this.chart.setOption(this.getDefaultOptions())
 
       // 只有当options有效且不为空时才设置
       if (this.options && Object.keys(this.options).length > 0) {
-        this.chart.setOption(this.options)
+        this.chart.setOption(this.options, true)
       }
 
       this.$emit('chart-ready', this.chart)

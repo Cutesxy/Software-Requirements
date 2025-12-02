@@ -1,369 +1,374 @@
 <template>
-  <div class="market-compare-page">
-    <!-- 顶部状态栏 -->
-    <div class="top-status-bar" v-if="hasData">
-      <div class="status-card">
-        <div class="status-icon">📊</div>
-        <div class="status-content">
-          <div class="status-value">{{ stats.totalRecords.toLocaleString() }}</div>
-          <div class="status-label">总记录数</div>
+  <div class="algorithm-visualization-page">
+    <!-- 顶部控制面板 -->
+    <div class="control-panel">
+      <div class="control-section">
+        <h3>算法参数配置</h3>
+        <div class="params-grid">
+          <div class="param-item">
+            <label>利润阈值 (USDT)</label>
+            <input 
+              v-model.number="algorithmParams.profitThreshold" 
+              type="number" 
+              step="0.1" 
+              min="0"
+              class="input"
+            />
+        </div>
+          <div class="param-item">
+            <label>Binance 手续费率 (%)</label>
+            <input 
+              v-model.number="algorithmParams.binanceFeePct" 
+              type="number" 
+              step="0.001" 
+              min="0"
+              max="1"
+              class="input"
+            />
+      </div>
+          <div class="param-item">
+            <label>Uniswap 手续费率 (%)</label>
+            <input 
+              v-model.number="algorithmParams.uniswapFeePct" 
+              type="number" 
+              step="0.001" 
+              min="0"
+              max="1"
+              class="input"
+            />
+        </div>
         </div>
       </div>
 
-      <div class="status-card">
-        <div class="status-icon">📈</div>
-        <div class="status-content">
-          <div class="status-value">{{ stats.avgSpread }}</div>
-          <div class="status-label">平均价差</div>
-        </div>
-      </div>
-
-      <div class="status-card">
-        <div class="status-icon">🎯</div>
-        <div class="status-content">
-          <div class="status-value">{{ stats.opportunities }}</div>
-          <div class="status-label">套利机会</div>
-        </div>
-      </div>
-
-      <div class="status-card quality-card">
-        <div class="status-icon">⚡</div>
-        <div class="status-content">
-          <div class="status-value" :class="getQualityColor()">
-            {{ getOverallQuality() }}%
+      <div class="control-section">
+        <h3>执行控制</h3>
+        <div class="control-buttons">
+          <button 
+            class="btn btn-primary" 
+            @click="startAnalysis"
+            :disabled="isRunning || isPaused"
+          >
+            ▶️ 开始分析
+            </button>
+          <button 
+            class="btn btn-secondary" 
+            @click="togglePause"
+            :disabled="!isRunning && !isPaused"
+          >
+            {{ isPaused ? '▶️ 继续' : '⏸️ 暂停' }}
+            </button>
+          <button 
+            class="btn btn-danger" 
+            @click="resetAnalysis"
+            :disabled="!isRunning && !isPaused && processedBuckets === 0"
+          >
+            🔄 重置
+            </button>
           </div>
-          <div class="status-label">数据质量</div>
-        </div>
-      </div>
-    </div>
+        <div class="progress-section">
+                <div class="progress-bar">
+                  <div 
+                    class="progress-fill" 
+              :style="{ width: progressPercentage + '%' }"
+                  ></div>
+                </div>
+          <span class="progress-text">{{ progressPercentage.toFixed(1) }}%</span>
+              </div>
+                </div>
+              </div>
 
-    <div class="dashboard-content">
-      <!-- 左侧控制面板 -->
-      <aside class="sidebar">
+    <!-- 主内容区域 -->
+    <div class="main-content">
+      <!-- 左侧：算法流程图 -->
+      <aside class="algorithm-flow">
         <div class="card">
           <div class="card-header">
-            <h3>🛠️ 数据操作</h3>
-          </div>
-
-          <div class="tool-section">
-            <button class="btn btn-primary w-full" @click="importData">
-              <span>📥 导入数据</span>
-            </button>
-
-            <button class="btn btn-secondary w-full" @click="exportData" :disabled="!hasData">
-              <span>📤 导出数据</span>
-            </button>
-
-            <button class="btn btn-outline w-full" @click="clearData" :disabled="!hasData">
-              <span>🗑️ 清空数据</span>
-            </button>
-          </div>
-
-          <div class="tool-section" v-if="hasData">
-            <h4>📋 数据质量</h4>
-            <div class="quality-panel">
-              <div class="quality-bar">
-                <div class="quality-bar-header">
-                  <span>完整性</span>
-                  <span class="quality-percent">{{ qualityChecks.completeness.value }}%</span>
+            <h3>算法执行流程</h3>
                 </div>
-                <div class="progress-bar">
-                  <div 
-                    class="progress-fill" 
-                    :class="qualityChecks.completeness.status"
-                    :style="{ width: qualityChecks.completeness.value + '%' }"
+          <div class="flow-diagram">
+            <div 
+              v-for="(step, index) in algorithmSteps" 
+              :key="index"
+              class="flow-step"
+              :class="{ 
+                'active': currentStep === index,
+                'completed': currentStep > index,
+                'pending': currentStep < index
+              }"
+            >
+              <!-- 进度条连接线 -->
+              <div 
+                v-if="index < algorithmSteps.length - 1"
+                class="progress-line"
+                :class="{
+                  'completed': currentStep > index,
+                  'active': currentStep === index
+                }"
                   ></div>
-                </div>
-              </div>
-
-              <div class="quality-bar">
-                <div class="quality-bar-header">
-                  <span>准确性</span>
-                  <span class="quality-percent">{{ qualityChecks.accuracy.value }}%</span>
-                </div>
-                <div class="progress-bar">
-                  <div 
-                    class="progress-fill" 
-                    :class="qualityChecks.accuracy.status"
-                    :style="{ width: qualityChecks.accuracy.value + '%' }"
-                  ></div>
-                </div>
-              </div>
-
-              <div class="quality-bar">
-                <div class="quality-bar-header">
-                  <span>连续性</span>
-                  <span class="quality-percent">{{ qualityChecks.consistency.value }}%</span>
-                </div>
-                <div class="progress-bar">
-                  <div 
-                    class="progress-fill" 
-                    :class="qualityChecks.consistency.status"
-                    :style="{ width: qualityChecks.consistency.value + '%' }"
-                  ></div>
-                </div>
+              
+              <!-- 步骤节点 -->
+              <div class="step-node">
+                <div 
+                  class="step-indicator"
+                  :class="{
+                    'active': currentStep === index,
+                    'completed': currentStep > index,
+                    'pending': currentStep < index
+                  }"
+                >
+                  <span v-if="currentStep > index" class="check-icon">✓</span>
+                  <span v-else class="step-number">{{ index + 1 }}</span>
               </div>
             </div>
 
-            <button class="btn-text" @click="runQualityCheck">
-              🔄 重新检测
-            </button>
+              <!-- 步骤内容 -->
+              <div class="step-content">
+                <div class="step-title">{{ step.title }}</div>
+                <div class="step-desc">{{ step.description }}</div>
+                <div v-if="step.data" class="step-data">
+                  <span class="data-icon">📊</span>
+                  {{ step.data }}
           </div>
-
-          <div class="tool-section">
-            <h4>📅 时间范围</h4>
-            <div class="time-display">
-              <div class="time-value">{{ stats.timeRange }}</div>
-              <div class="time-label">数据时间跨度</div>
+              </div>
             </div>
           </div>
         </div>
       </aside>
 
-      <!-- 右侧图表区域 -->
-      <div class="charts-area">
-        <!-- 空状态 -->
-        <div v-if="!hasData" class="dashboard-empty">
-          <div class="empty-illustration">
-            <div class="empty-circle">
-              <span class="empty-icon">📊</span>
-            </div>
-            <div class="empty-rays">
-              <div class="ray"></div>
-              <div class="ray"></div>
-              <div class="ray"></div>
-              <div class="ray"></div>
-            </div>
-          </div>
-          <h2 class="empty-title">开始数据分析之旅</h2>
-          <p class="empty-description">导入您的交易数据，探索市场机会，发现潜在收益</p>
-          <button class="empty-action-btn" @click="importData">
-            <span class="btn-icon">🚀</span>
-            导入数据
-          </button>
-        </div>
-
-        <!-- 数据概览卡片 -->
-        <div class="overview-cards" v-if="hasData">
-          <div class="overview-card">
-            <div class="card-icon">📈</div>
-            <div class="card-content">
-              <div class="card-value">{{ report.basicStats.avgSpread }}</div>
-              <div class="card-label">平均价差</div>
-              <div class="card-trend positive">
-                <span>↗</span>
-                <span>+2.5%</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="overview-card">
-            <div class="card-icon">🎯</div>
-            <div class="card-content">
-              <div class="card-value">{{ report.arbAnalysis.opportunities }}</div>
-              <div class="card-label">潜在机会</div>
-              <div class="card-trend positive">
-                <span>↗</span>
-                <span>+12</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="overview-card">
-            <div class="card-icon">💰</div>
-            <div class="card-content">
-              <div class="card-value">{{ report.arbAnalysis.avgReturn }}</div>
-              <div class="card-label">平均收益</div>
-              <div class="card-trend positive">
-                <span>↗</span>
-                <span>+0.8%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 图表网格 -->
-        <div class="charts-grid" v-if="hasData">
-          <!-- 数据趋势图 -->
-          <div class="chart-widget">
-            <div class="widget-header">
-              <h4>📊 价差与成交量趋势</h4>
-              <div class="widget-actions">
-                <button class="widget-btn" title="全屏">⛶</button>
-                <button class="widget-btn" title="导出">↓</button>
-              </div>
-            </div>
-            <chart-card
-              title=""
-              :height="280"
-              :options="dataOverviewOptions"
-              :loading="loading"
-            />
-          </div>
-
-          <!-- 数据质量环形图 -->
-          <div class="chart-widget">
-            <div class="widget-header">
-              <h4>✨ 数据质量分布</h4>
-            </div>
-            <chart-card
-              title=""
-              :height="280"
-              :options="qualityPieOptions"
-              :loading="loading"
-            />
-          </div>
-
-          <!-- 成交量分布柱状图 -->
-          <div class="chart-widget">
-            <div class="widget-header">
-              <h4>📦 成交量分布</h4>
-            </div>
-            <chart-card
-              title=""
-              :height="280"
-              :options="volumeDistributionOptions"
-              :loading="loading"
-            />
-          </div>
-
-          <!-- 时间热力图 -->
-          <div class="chart-widget">
-            <div class="widget-header">
-              <h4>🔥 时间分布热力图</h4>
-            </div>
-            <chart-card
-              title=""
-              :height="280"
-              :options="timeHeatmapOptions"
-              :loading="loading"
-            />
-          </div>
-        </div>
-
-        <!-- 数据分析报告 -->
-        <div class="card analysis-report" v-if="hasData">
+      <!-- 中间：实时数据流可视化 -->
+      <main class="data-visualization">
+        <!-- 时间桶列表 -->
+        <div class="card">
           <div class="card-header">
-            <h3>📋 分析报告</h3>
+            <h3>时间桶数据流</h3>
             <div class="header-actions">
-              <button class="btn-icon" @click="generateReport" title="生成报告">📄</button>
-              <button class="btn-icon" @click="exportReport" title="导出报告">↓</button>
+              <span v-if="totalBuckets > 0" class="status-badge">
+                已处理: {{ processedBuckets }} / {{ totalBuckets }}
+              </span>
+              <span v-else-if="isRunning" class="status-badge">
+                正在读取数据...
+              </span>
+            </div>
+            </div>
+          <div class="time-buckets-container">
+            <div v-if="timeBuckets.length === 0 && !isRunning" class="empty-state">
+              <div class="empty-icon">📊</div>
+              <div class="empty-text">点击"开始分析"查看算法执行过程</div>
+          </div>
+            <div 
+              v-for="(bucket, index) in visibleTimeBuckets" 
+              :key="bucket.timestamp"
+              class="time-bucket-item"
+              :class="{
+                'processing': bucket.status === 'processing',
+                'completed': bucket.status === 'completed',
+                'pending': bucket.status === 'pending',
+                'expanded': expandedBucketIndex === bucket.timestamp
+              }"
+              @click="toggleBucketDetail(bucket.timestamp)"
+            >
+              <div class="bucket-header">
+                <div class="bucket-info">
+                  <span class="bucket-time">{{ formatTime(bucket.timestamp) }}</span>
+                  <span class="bucket-swaps">Swap数量: {{ bucket.swapCount }}</span>
+                  <span class="bucket-spread">价差: {{ bucket.priceDiff.toFixed(2) }} USDT</span>
+        </div>
+                <div class="bucket-status">
+                  <span class="status-icon">{{ getStatusIcon(bucket.status) }}</span>
+                  <span v-if="bucket.status === 'completed' && bucket.hasSignal" class="signal-badge">✓ 信号</span>
             </div>
           </div>
 
-          <div class="report-content">
-            <div class="report-section">
-              <h4>📈 基本统计</h4>
-              <div class="report-grid">
-                <div class="report-item">
-                  <label>数据时间范围</label>
-                  <span>{{ report.basicStats.timeRange }}</span>
-                </div>
-                <div class="report-item">
-                  <label>总交易对数</label>
-                  <span>{{ report.basicStats.totalPairs }}</span>
-                </div>
-                <div class="report-item">
-                  <label>平均价差</label>
-                  <span>{{ report.basicStats.avgSpread }}</span>
-                </div>
-                <div class="report-item">
-                  <label>最大价差</label>
-                  <span>{{ report.basicStats.maxSpread }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="report-section">
-              <h4>🎯 套利机会分析</h4>
-              <div class="report-grid">
-                <div class="report-item">
-                  <label>潜在机会数</label>
-                  <span>{{ report.arbAnalysis.opportunities }}</span>
-                </div>
-                <div class="report-item">
-                  <label>平均收益率</label>
-                  <span>{{ report.arbAnalysis.avgReturn }}</span>
-                </div>
-                <div class="report-item">
-                  <label>最佳交易时机</label>
-                  <span>{{ report.arbAnalysis.bestTime }}</span>
-                </div>
-                <div class="report-item">
-                  <label>风险等级</label>
-                  <span class="risk-level" :class="report.arbAnalysis.riskLevel">
-                    {{ report.arbAnalysis.riskLevelText }}
-                  </span>
-                </div>
+              <!-- 展开的详细分析 -->
+              <div v-if="expandedBucketIndex === bucket.timestamp && bucket.status === 'completed'" class="bucket-detail">
+                <!-- 毛利润计算 -->
+                <div class="calculation-section">
+                  <h4>毛利润计算</h4>
+                  <div class="formula-box">
+                    <div class="formula">毛利润 = |价差| × Uniswap交易量</div>
+                    <div class="formula-result">
+                      = |{{ bucket.priceDiff.toFixed(2)}}| × {{ bucket.uniswapVolume.toFixed(4)}}
+                      = <strong>{{ bucket.grossProfit.toFixed(2)}} USDT</strong>
               </div>
             </div>
           </div>
+
+                <!-- Swap交易列表 -->
+                <div class="calculation-section">
+                  <h4>Swap交易详情 ({{ bucket.swaps.length }} 笔)</h4>
+                  <div class="swaps-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Swap ID</th>
+                          <th>Amount0</th>
+                          <th>Amount1</th>
+                          <th>Price</th>
+                          <th>Gas Used</th>
+                          <th>Binance费用</th>
+                          <th>Uniswap费用</th>
+                          <th>Gas成本</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(swap, sIdx) in bucket.swaps" :key="sIdx">
+                          <td>#{{ sIdx + 1 }}</td>
+                          <td>{{ swap.amount0.toFixed(4) }}</td>
+                          <td>{{ swap.amount1.toFixed(4) }}</td>
+                          <td>{{ swap.price.toFixed(2) }}</td>
+                          <td>{{ swap.gasUsed }}</td>
+                          <td>{{ swap.binanceFee.toFixed(4) }}</td>
+                          <td>{{ swap.uniswapFee.toFixed(4) }}</td>
+                          <td>{{ swap.gasCost.toFixed(4) }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+          </div>
+        </div>
+
+                <!-- 成本累计图表 -->
+                <div class="calculation-section">
+                  <h4>成本累计</h4>
+            <chart-card
+              title=""
+                    :height="250"
+                    :options="getCostAccumulationChart(bucket)"
+            />
+          </div>
+
+                <!-- 净利润计算 -->
+                <div class="calculation-section">
+                  <h4>净利润计算</h4>
+                  <div class="profit-comparison">
+                    <div class="profit-item">
+                      <span class="profit-label">毛利润:</span>
+                      <span class="profit-value positive">+{{ bucket.grossProfit.toFixed(2)}} USDT</span>
+            </div>
+                    <div class="profit-item">
+                      <span class="profit-label">总成本:</span>
+                      <span class="profit-value negative">-{{ bucket.totalCost.toFixed(2)}} USDT</span>
+          </div>
+                    <div class="profit-divider">─</div>
+                    <div class="profit-item total">
+                      <span class="profit-label">净利润:</span>
+                      <span class="profit-value" :class="bucket.netProfit >= 0 ? 'positive' : 'negative'">
+                        {{ bucket.netProfit >= 0 ? '+' : '' }}{{ bucket.netProfit.toFixed(2)}} USDT
+                      </span>
+            </div>
+                    <div class="profit-item">
+                      <span class="profit-label">阈值:</span>
+                      <span class="profit-value">{{ algorithmParams.profitThreshold.toFixed(2)}} USDT</span>
+          </div>
+                    <div class="profit-judgment" :class="bucket.hasSignal ? 'signal-yes' : 'signal-no'">
+                      {{ bucket.hasSignal ? '✓ 生成信号' : '✗ 不生成信号' }}
+            </div>
+          </div>
+        </div>
+
+                <!-- 置信度计算 -->
+                <div v-if="bucket.hasSignal" class="calculation-section">
+                  <h4>置信度计算</h4>
+                  <div class="formula-box">
+                    <div class="formula">置信度 = exp(-价格标准差 / 1000)</div>
+                    <div class="formula-result">
+                      = exp(-{{ bucket.priceStd.toFixed(2)}} / 1000)
+                      = <strong>{{ bucket.confidence.toFixed(4)}}</strong>
+            </div>
+          </div>
+                </div>
+                </div>
+                </div>
+                </div>
+              </div>
+      </main>
+
+      <!-- 右侧：统计面板 -->
+      <aside class="statistics-panel">
+        <div class="card">
+          <div class="card-header">
+            <h3>实时统计</h3>
+                </div>
+          <div class="stats-grid">
+            <div class="stat-item">
+              <span class="stat-label">已处理时间桶</span>
+              <span class="stat-value">{{ processedBuckets }}</span>
+                </div>
+            <div class="stat-item">
+              <span class="stat-label">已处理 Swap</span>
+              <span class="stat-value">{{ totalProcessedSwaps }}</span>
+                </div>
+            <div class="stat-item">
+              <span class="stat-label">生成信号数</span>
+              <span class="stat-value positive">{{ generatedSignals.length }}</span>
+                </div>
+            <div class="stat-item">
+              <span class="stat-label">总毛利润</span>
+              <span class="stat-value positive">+{{ totalGrossProfit.toFixed(2)}} USDT</span>
+              </div>
+            <div class="stat-item">
+              <span class="stat-label">总成本</span>
+              <span class="stat-value negative">-{{ totalCost.toFixed(2)}} USDT</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">总净利润</span>
+              <span class="stat-value" :class="totalNetProfit >= 0 ? 'positive' : 'negative'">
+                {{ totalNetProfit >= 0 ? '+' : '' }}{{ totalNetProfit.toFixed(2)}} USDT
+              </span>
         </div>
       </div>
     </div>
 
-    <!-- 数据导入弹窗 -->
-    <div v-if="showImportDialog" class="modal-overlay" @click="closeImportDialog">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h3>📥 导入数据</h3>
-          <button class="btn-close" @click="closeImportDialog">×</button>
+        <!-- 成本分解饼图 -->
+        <div class="card">
+          <div class="card-header">
+            <h3>成本分解</h3>
         </div>
-
-        <div class="modal-body">
-          <div class="import-options">
-            <div class="import-option">
-              <div class="option-icon">📁</div>
-              <div class="option-content">
-                <h4>从文件导入</h4>
-                <p>支持 CSV、JSON 格式的数据文件</p>
-                <input
-                  type="file"
-                  ref="fileInput"
-                  @change="onFileSelected"
-                  accept=".csv,.json"
-                  style="display: none"
-                />
-                <button class="btn btn-outline" @click="$refs.fileInput.click()">
-                  选择文件
-                </button>
-              </div>
+          <chart-card
+            title=""
+            :height="250"
+            :options="costBreakdownChart"
+          />
             </div>
 
-            <div class="import-option">
-              <div class="option-icon">🔗</div>
-              <div class="option-content">
-                <h4>从API导入</h4>
-                <p>连接外部数据源自动同步</p>
-                <button class="btn btn-outline" @click="importFromAPI" disabled>
-                  连接API
-                </button>
+        <!-- 信号质量分布 -->
+        <div class="card">
+          <div class="card-header">
+            <h3>信号质量分布</h3>
               </div>
+          <chart-card
+            title=""
+            :height="300"
+            :options="signalQualityChart"
+          />
             </div>
-
-            <div class="import-option">
-              <div class="option-icon">🗄️</div>
-              <div class="option-content">
-                <h4>使用示例数据</h4>
-                <p>快速加载预设数据集进行体验</p>
-                <button class="btn btn-primary" @click="loadSampleData">
-                  加载示例数据
-                </button>
-              </div>
-            </div>
+      </aside>
           </div>
 
-          <div v-if="selectedFile" class="file-preview">
-            <h4>文件预览</h4>
-            <div class="file-info">
-              <span>📄 文件名: {{ selectedFile.name }}</span>
-              <span>📦 大小: {{ formatFileSize(selectedFile.size) }}</span>
+    <!-- 底部：信号输出区 -->
+    <div class="signals-output">
+      <div class="card">
+        <div class="card-header">
+          <h3>生成的信号 ({{ generatedSignals.length }})</h3>
+          <div class="header-actions">
+            <button class="btn btn-sm" @click="exportSignals">📥 导出</button>
             </div>
-            <button class="btn btn-primary" @click="processImport" :disabled="importing">
-              {{ importing ? '导入中...' : '开始导入' }}
-            </button>
           </div>
-        </div>
+        <data-table
+          :columns="signalColumns"
+          :data="generatedSignals"
+          :max-height="300"
+        >
+          <template #col-direction="{ value }">
+            <span class="badge" :class="value === 'buy' ? 'badge-primary' : 'badge-success'">
+              {{ value === 'buy' ? '买入' : '卖出' }}
+            </span>
+          </template>
+          <template #col-netProfit="{ value }">
+            <span class="value-display" :class="value >= 0 ? 'positive' : 'negative'">
+              {{ value >= 0 ? '+' : '' }}{{ value.toFixed(2) }}
+            </span>
+          </template>
+        </data-table>
       </div>
     </div>
   </div>
@@ -371,646 +376,600 @@
 
 <script>
 import ChartCard from '@/components/ChartCard.vue'
-import { mapState } from 'vuex'
+import DataTable from '@/components/DataTable.vue'
+import processedDataLoader from '@/utils/processedDataLoader'
 
 export default {
   name: 'MarketCompare',
+  
   components: {
-    ChartCard
+    ChartCard,
+    DataTable
   },
 
   data() {
     return {
-      loading: false,
-      hasData: false,
-      showImportDialog: false,
-      selectedFile: null,
-      importing: false,
-
-      qualityChecks: {
-        completeness: { value: 0, status: 'good' },
-        accuracy: { value: 0, status: 'good' },
-        consistency: { value: 0, status: 'good' }
+      // 算法参数
+      algorithmParams: {
+        profitThreshold: 10.0,
+        binanceFeePct: 0.001,
+        uniswapFeePct: 0.003
       },
-
-      stats: {
-        totalRecords: 0,
-        timeRange: '-',
-        avgSpread: '-',
-        opportunities: 0
-      },
-
-      report: {
-        basicStats: {
-          timeRange: '-',
-          totalPairs: 0,
-          avgSpread: '-',
-          maxSpread: '-'
-        },
-        arbAnalysis: {
-          opportunities: 0,
-          avgReturn: '-',
-          bestTime: '-',
-          riskLevel: 'low',
-          riskLevelText: '低风险'
-        }
-      }
+      
+      // 执行状态
+      isRunning: false,
+      isPaused: false,
+      currentStep: -1,
+      processedBuckets: 0,
+      totalBuckets: 0,
+      expandedBucketIndex: -1,
+      
+      // 算法步骤
+      algorithmSteps: [
+        { title: '读取数据源', description: '从数据库读取 uniswap_swaps 和 merged_trading_data', data: null },
+        { title: '遍历时间桶', description: '按时间顺序处理每个时间桶', data: null },
+        { title: '计算毛利润', description: '毛利润 = |价差| × Uniswap交易量', data: null },
+        { title: '遍历Swap交易', description: '处理时间桶内的所有Swap交易', data: null },
+        { title: '累计计算成本', description: '累计Binance手续费、Uniswap手续费、Gas成本', data: null },
+        { title: '计算净利润', description: '净利润 = 毛利润 - 总成本', data: null },
+        { title: '判断生成信号', description: '净利润 > 阈值时生成套利信号', data: null }
+      ],
+      
+      // 时间桶数据
+      timeBuckets: [],
+      
+      // 生成的信号
+      generatedSignals: [],
+      
+      // 表格列定义
+      signalColumns: [
+        { key: 'timestamp', label: '时间', type: 'time', width: '180px' },
+        { key: 'direction', label: '方向', width: '100px' },
+        { key: 'grossProfit', label: '毛利润', type: 'number', decimals: 2 },
+        { key: 'totalCost', label: '总成本', type: 'number', decimals: 2 },
+        { key: 'netProfit', label: '净利润', type: 'number', decimals: 2 },
+        { key: 'confidence', label: '置信度', type: 'number', decimals: 4 }
+      ]
     }
   },
 
   computed: {
-    ...mapState(['priceData', 'spreadData', 'signals']),
-
-    dataOverviewOptions() {
-      if (!this.spreadData || this.spreadData.length === 0) return null
-
-      const spreadData = this.spreadData.map(d => [d.t, d.spread])
-      const volumeData = this.spreadData.map(d => [d.t, d.volume || Math.random() * 1000])
-
-      return {
-        tooltip: { 
-          trigger: 'axis',
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          borderColor: '#e5e7eb',
-          textStyle: { color: '#111827' }
-        },
-        legend: {
-          data: ['价差', '成交量'],
-          top: 10,
-          textStyle: { color: '#6b7280' }
-        },
-        grid: {
-          left: '3%',
-          right: '4%',
-          bottom: '3%',
-          top: '15%',
-          containLabel: true
-        },
-        xAxis: {
-          type: 'time',
-          axisLabel: {
-            color: '#6b7280',
-            formatter: (value) => {
-              const date = new Date(value)
-              return `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
-            }
-          }
-        },
-        yAxis: [
-          {
-            type: 'value',
-            name: '价差',
-            position: 'left',
-            axisLabel: { color: '#6b7280' },
-            splitLine: { lineStyle: { color: '#f3f4f6' } }
-          },
-          {
-            type: 'value',
-            name: '成交量',
-            position: 'right',
-            axisLabel: { color: '#6b7280' },
-            splitLine: { show: false }
-          }
-        ],
-        series: [
-          {
-            name: '价差',
-            type: 'line',
-            yAxisIndex: 0,
-            data: spreadData,
-            smooth: true,
-            lineStyle: { color: '#f97316', width: 2 },
-            itemStyle: { color: '#f97316' },
-            areaStyle: { 
-              color: {
-                type: 'linear',
-                x: 0, y: 0, x2: 0, y2: 1,
-                colorStops: [
-                  { offset: 0, color: 'rgba(249, 115, 22, 0.3)' },
-                  { offset: 1, color: 'rgba(249, 115, 22, 0.05)' }
-                ]
-              }
-            }
-          },
-          {
-            name: '成交量',
-            type: 'bar',
-            yAxisIndex: 1,
-            data: volumeData,
-            barWidth: '60%',
-            itemStyle: { 
-              color: {
-                type: 'linear',
-                x: 0, y: 0, x2: 0, y2: 1,
-                colorStops: [
-                  { offset: 0, color: '#3b82f6' },
-                  { offset: 1, color: '#60a5fa' }
-                ]
-              },
-              opacity: 0.7
-            }
-          }
-        ]
-      }
+    progressPercentage() {
+      return this.totalBuckets > 0 ? (this.processedBuckets / this.totalBuckets) * 100 : 0
     },
-
-    qualityPieOptions() {
+    
+    // 只显示已处理的时间桶（包括正在处理的）
+    visibleTimeBuckets() {
+      return this.timeBuckets.filter(b => 
+        b.status === 'processing' || b.status === 'completed'
+      )
+    },
+    
+    totalProcessedSwaps() {
+      return this.timeBuckets
+        .filter(b => b.status === 'completed')
+        .reduce((sum, b) => sum + b.swapCount, 0)
+    },
+    
+    totalGrossProfit() {
+      return this.generatedSignals.reduce((sum, s) => sum + s.grossProfit, 0)
+    },
+    
+    totalCost() {
+      return this.generatedSignals.reduce((sum, s) => sum + s.totalCost, 0)
+    },
+    
+    totalNetProfit() {
+      return this.generatedSignals.reduce((sum, s) => sum + s.netProfit, 0)
+    },
+    
+    costBreakdownChart() {
+      const binanceFee = this.generatedSignals.reduce((sum, s) => sum + s.binanceFee, 0)
+      const uniswapFee = this.generatedSignals.reduce((sum, s) => sum + s.uniswapFee, 0)
+      const gasCost = this.generatedSignals.reduce((sum, s) => sum + s.gasCost, 0)
+      const total = binanceFee + uniswapFee + gasCost
+      
+      if (total === 0) {
+        return { series: [] }
+      }
+      
       return {
         tooltip: {
           trigger: 'item',
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          borderColor: '#e5e7eb',
-          textStyle: { color: '#111827' }
+          formatter: '{b}: {c} USDT ({d}%)'
         },
-        legend: {
-          orient: 'vertical',
-          right: 10,
-          top: 'center',
-          textStyle: { color: '#6b7280' }
-        },
-        series: [
-          {
+        series: [{
             type: 'pie',
-            radius: ['45%', '70%'],
-            center: ['40%', '50%'],
-            avoidLabelOverlap: false,
-            itemStyle: {
-              borderRadius: 10,
-              borderColor: '#fff',
-              borderWidth: 2
-            },
-            label: {
-              show: false
-            },
-            labelLine: {
-              show: false
-            },
+          radius: ['40%', '70%'],
             data: [
-              { value: this.qualityChecks.completeness.value, name: '完整性', itemStyle: { color: '#10b981' } },
-              { value: this.qualityChecks.accuracy.value, name: '准确性', itemStyle: { color: '#3b82f6' } },
-              { value: this.qualityChecks.consistency.value, name: '连续性', itemStyle: { color: '#f59e0b' } }
-            ]
+            { value: binanceFee.toFixed(2), name: 'Binance手续费' },
+            { value: uniswapFee.toFixed(2), name: 'Uniswap手续费' },
+            { value: gasCost.toFixed(2), name: 'Gas成本' }
+          ],
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowColor: 'rgba(0, 0, 0, 0.5)'
+            }
           }
-        ]
+        }]
       }
     },
-
-    volumeDistributionOptions() {
-      if (!this.spreadData) return null
-
-      const hours = Array.from({ length: 24 }, (_, i) => i)
-      const volumeByHour = new Array(24).fill(0)
-      const countByHour = new Array(24).fill(0)
-
-      this.spreadData.forEach(d => {
-        const hour = new Date(d.t).getHours()
-        volumeByHour[hour] += d.volume || Math.random() * 1000
-        countByHour[hour]++
-      })
-
-      const avgVolumeByHour = volumeByHour.map((v, i) => 
-        countByHour[i] > 0 ? v / countByHour[i] : 0
-      )
+    
+    signalQualityChart() {
+      if (this.generatedSignals.length === 0) {
+        return { series: [] }
+      }
+      
+      const profits = this.generatedSignals.map(s => s.netProfit)
+      const confidences = this.generatedSignals.map(s => s.confidence)
 
       return {
         tooltip: {
           trigger: 'axis',
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          borderColor: '#e5e7eb',
-          textStyle: { color: '#111827' }
+          axisPointer: { type: 'cross' }
         },
-        grid: {
-          left: '3%',
-          right: '4%',
-          bottom: '3%',
-          top: '10%',
-          containLabel: true
+        legend: {
+          data: ['净利润分布', '置信度分布']
         },
         xAxis: {
-          type: 'category',
-          data: hours.map(h => `${h}:00`),
-          axisLabel: { 
-            color: '#6b7280',
-            interval: 2
-          }
+          type: 'value',
+          name: '数值'
         },
         yAxis: {
           type: 'value',
-          axisLabel: { color: '#6b7280' },
-          splitLine: { lineStyle: { color: '#f3f4f6' } }
+          name: '频次'
         },
         series: [
           {
-            data: avgVolumeByHour,
+            name: '净利润分布',
             type: 'bar',
-            barWidth: '60%',
-            itemStyle: {
-              color: {
-                type: 'linear',
-                x: 0, y: 0, x2: 0, y2: 1,
-                colorStops: [
-                  { offset: 0, color: '#8b5cf6' },
-                  { offset: 1, color: '#a78bfa' }
-                ]
-              },
-              borderRadius: [4, 4, 0, 0]
-            }
+            data: this.calculateHistogram(profits, 10)
+          },
+          {
+            name: '置信度分布',
+            type: 'line',
+            data: this.calculateHistogram(confidences, 10)
           }
         ]
       }
+    }
+  },
+  
+  methods: {
+    startAnalysis() {
+      this.isRunning = true
+      this.isPaused = false
+      this.currentStep = 0
+      this.processedBuckets = 0
+      this.totalBuckets = 0
+      this.timeBuckets = []
+      this.generatedSignals = []
+      this.expandedBucketIndex = -1
+
+      console.log('开始分析算法...')
+
+      // 开始执行（数据会在读取数据源步骤时生成）
+      this.executeAnalysis()
     },
-
-    timeHeatmapOptions() {
-      if (!this.spreadData) return null
-
-      const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-      const hours = Array.from({ length: 24 }, (_, i) => i)
-      const data = []
-
-      for (let day = 0; day < 7; day++) {
-        for (let hour = 0; hour < 24; hour++) {
-          const value = Math.floor(Math.random() * 100)
-          data.push([hour, day, value])
-        }
+    
+    togglePause() {
+      this.isPaused = !this.isPaused
+      if (!this.isPaused) {
+        this.executeAnalysis()
       }
-
+    },
+    
+    resetAnalysis() {
+      this.isRunning = false
+      this.isPaused = false
+      this.currentStep = -1
+      this.processedBuckets = 0
+      this.totalBuckets = 0
+      this.timeBuckets = []
+      this.generatedSignals = []
+      this.expandedBucketIndex = -1
+      
+      // 重置所有步骤数据
+      this.algorithmSteps.forEach(step => {
+        step.data = null
+      })
+    },
+    
+    async executeAnalysis() {
+      if (!this.isRunning || this.isPaused) return
+      
+      // 步骤1: 读取数据源 - 加载9/1的真实数据
+      this.currentStep = 0
+      this.algorithmSteps[0].data = '正在读取数据...'
+      await this.delay(800)
+      
+      try {
+        // 加载processed_data.json
+        const rawData = await processedDataLoader.loadData()
+        
+        // 9/1的时间范围：2025-09-01 00:00:00 到 23:59:59 UTC
+        const startTime = new Date('2025-09-01T00:00:00Z').getTime() // 毫秒
+        const endTime = new Date('2025-09-01T23:59:59Z').getTime() // 毫秒
+        
+        // 过滤9/1的数据
+        const sept1Data = rawData.data.filter(item => {
+          const timestamp = item[0] * 1000 // 转换为毫秒
+          return timestamp >= startTime && timestamp <= endTime
+        })
+        
+        this.algorithmSteps[0].data = `已读取 ${sept1Data.length} 条9/1数据`
+        await this.delay(300)
+        
+        // 将数据按时间桶组织（每5分钟一个桶）
+        const bucketSize = 5 * 60 * 1000 // 5分钟，单位毫秒
+        const bucketsMap = new Map()
+        
+        sept1Data.forEach(item => {
+          const timestamp = item[0] * 1000 // 转换为毫秒
+          const bucketKey = Math.floor(timestamp / bucketSize) * bucketSize
+          
+          if (!bucketsMap.has(bucketKey)) {
+            bucketsMap.set(bucketKey, [])
+          }
+          bucketsMap.get(bucketKey).push(item)
+        })
+        
+        // 转换为时间桶数组，按时间排序
+        const bucketDataSources = Array.from(bucketsMap.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map(([bucketTime, items]) => {
+            // 计算桶的统计数据
+            const uData = items.map(item => item[1]) // Uniswap数据
+            const bData = items.map(item => item[2]) // Binance数据
+            const priceDiffs = items.map(item => item[3]) // 价差
+            
+            // 计算平均价差
+            const avgPriceDiff = priceDiffs.reduce((sum, pd) => sum + pd, 0) / priceDiffs.length
+            
+            // 计算Uniswap总交易量
+            const totalUniswapVolume = uData.reduce((sum, u) => sum + (u[1] || 0), 0) // ve: 成交量
+            
+            // 计算价格标准差（使用Uniswap价格）
+            const prices = uData.map(u => u[3] || 0) // ap: 平均价格
+            let priceStd = 0
+            if (prices.length > 0) {
+              const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length
+              priceStd = Math.sqrt(
+                prices.reduce((sum, p) => sum + Math.pow(p - avgPrice, 2), 0) / prices.length
+              )
+            }
+            
+            // 为每个数据点生成swap信息（模拟）
+            const swaps = items.map((item, idx) => {
+              const u = item[1]
+              const b = item[2]
+              const uniswapPrice = u[3] || 0 // ap: 平均价格
+              const uniswapVolume = u[1] || 0 // ve: 成交量
+              const binancePrice = b[3] || 0 // c: 收盘价
+              
+              // 计算手续费（基于交易量）
+              const binanceFee = uniswapVolume * binancePrice * this.algorithmParams.binanceFeePct
+              const uniswapFee = uniswapVolume * uniswapPrice * this.algorithmParams.uniswapFeePct
+              
+              // Gas成本估算（固定值，实际应该从数据中获取）
+              const gasUsed = 150000 // 估算gas使用量
+              const gasPrice = 30 // gwei
+              const gasCost = (gasUsed * gasPrice * uniswapPrice) / 1e18
+              
+              return {
+                amount0: uniswapVolume,
+                amount1: uniswapVolume * uniswapPrice,
+                price: uniswapPrice,
+                gasUsed,
+                gasPrice,
+                binanceFee,
+                uniswapFee,
+                gasCost
+              }
+            })
+            
+            return {
+              timestamp: bucketTime,
+              swapCount: items.length,
+              priceDiff: avgPriceDiff,
+              uniswapVolume: totalUniswapVolume,
+              status: 'pending',
+              hasSignal: false,
+              grossProfit: 0,
+              totalCost: 0,
+              netProfit: 0,
+              priceStd: priceStd || 0,
+              confidence: 0,
+              swaps: swaps
+            }
+          })
+        
+        this.totalBuckets = bucketDataSources.length
+        this.algorithmSteps[0].data = `已读取 ${this.totalBuckets} 个时间桶数据（9/1真实数据）`
+        await this.delay(300)
+        
+        // 步骤2: 遍历时间桶
+        this.currentStep = 1
+        this.algorithmSteps[1].data = `开始处理 ${this.totalBuckets} 个时间桶`
+        
+        // 处理每个时间桶（一个个添加）
+        for (let i = this.processedBuckets; i < this.totalBuckets; i++) {
+          if (this.isPaused) break
+          
+          // 从数据源获取并添加到列表
+          const bucket = bucketDataSources[i]
+          this.timeBuckets.push(bucket)
+          bucket.status = 'processing'
+          
+          // 更新步骤2的数据
+          this.algorithmSteps[1].data = `处理中: ${i + 1} / ${this.totalBuckets}`
+          await this.delay(200)
+          
+          // 步骤3: 计算毛利润
+          this.currentStep = 2
+          bucket.grossProfit = Math.abs(bucket.priceDiff) * bucket.uniswapVolume
+          this.algorithmSteps[2].data = `时间桶 ${i + 1}: ${bucket.grossProfit.toFixed(2)} USDT`
+          await this.delay(300)
+          
+          // 步骤4: 遍历Swap交易
+          this.currentStep = 3
+          this.algorithmSteps[3].data = `处理 ${bucket.swapCount} 笔Swap交易`
+          await this.delay(300)
+          
+          // 步骤5: 累计计算成本
+          this.currentStep = 4
+          bucket.totalCost = bucket.swaps.reduce((sum, swap) => {
+            return sum + swap.binanceFee + swap.uniswapFee + swap.gasCost
+          }, 0)
+          this.algorithmSteps[4].data = `总成本: ${bucket.totalCost.toFixed(2)} USDT`
+          await this.delay(300)
+          
+          // 步骤6: 计算净利润
+          this.currentStep = 5
+          bucket.netProfit = bucket.grossProfit - bucket.totalCost
+          this.algorithmSteps[5].data = `净利润: ${bucket.netProfit.toFixed(2)} USDT`
+          await this.delay(300)
+          
+          // 步骤7: 判断生成信号
+          this.currentStep = 6
+          if (bucket.netProfit > this.algorithmParams.profitThreshold) {
+            bucket.hasSignal = true
+            bucket.confidence = Math.exp(-bucket.priceStd / 1000)
+            
+            const signal = {
+              timestamp: bucket.timestamp,
+              direction: bucket.priceDiff > 0 ? 'buy' : 'sell',
+              grossProfit: bucket.grossProfit,
+              binanceFee: bucket.swaps.reduce((sum, s) => sum + s.binanceFee, 0),
+              uniswapFee: bucket.swaps.reduce((sum, s) => sum + s.uniswapFee, 0),
+              gasCost: bucket.swaps.reduce((sum, s) => sum + s.gasCost, 0),
+              totalCost: bucket.totalCost,
+              netProfit: bucket.netProfit,
+              confidence: bucket.confidence
+            }
+            
+            this.generatedSignals.push(signal)
+            this.algorithmSteps[6].data = `✓ 生成信号 #${this.generatedSignals.length}`
+          } else {
+            this.algorithmSteps[6].data = '✗ 不满足阈值条件'
+          }
+          
+          bucket.status = 'completed'
+          this.processedBuckets = i + 1
+          
+          await this.delay(500)
+        }
+        
+        if (this.processedBuckets >= this.totalBuckets) {
+          this.isRunning = false
+          this.currentStep = -1
+        }
+      } catch (error) {
+        console.error('加载数据失败:', error)
+        this.algorithmSteps[0].data = '数据加载失败: ' + error.message
+        this.isRunning = false
+        this.currentStep = -1
+        alert('数据加载失败: ' + error.message)
+      }
+    },
+    
+    toggleBucketDetail(timestamp) {
+      if (this.expandedBucketIndex === timestamp) {
+        this.expandedBucketIndex = -1
+      } else {
+        this.expandedBucketIndex = timestamp
+      }
+    },
+    
+    getCostAccumulationChart(bucket) {
+      const data = []
+      let binanceAcc = 0
+      let uniswapAcc = 0
+      let gasAcc = 0
+      
+      bucket.swaps.forEach((swap, idx) => {
+        binanceAcc += swap.binanceFee
+        uniswapAcc += swap.uniswapFee
+        gasAcc += swap.gasCost
+        
+        data.push({
+          swap: idx + 1,
+          binance: binanceAcc,
+          uniswap: uniswapAcc,
+          gas: gasAcc,
+          total: binanceAcc + uniswapAcc + gasAcc
+        })
+      })
+      
       return {
         tooltip: {
-          position: 'top',
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          borderColor: '#e5e7eb',
-          textStyle: { color: '#111827' }
+          trigger: 'axis',
+          axisPointer: { type: 'cross' }
         },
-        grid: {
-          height: '70%',
-          top: '10%',
-          left: '80px',
-          right: '20px'
+        legend: {
+          data: ['Binance手续费', 'Uniswap手续费', 'Gas成本', '总成本']
         },
         xAxis: {
           type: 'category',
-          data: hours.map(h => `${h}h`),
-          splitArea: { show: true },
-          axisLabel: { color: '#6b7280', interval: 2 }
+          data: data.map(d => `Swap ${d.swap}`)
         },
         yAxis: {
-          type: 'category',
-          data: days,
-          splitArea: { show: true },
-          axisLabel: { color: '#6b7280' }
-        },
-        visualMap: {
-          min: 0,
-          max: 100,
-          calculable: true,
-          orient: 'horizontal',
-          left: 'center',
-          bottom: '5%',
-          textStyle: { color: '#6b7280' },
-          inRange: {
-            color: ['#f0f9ff', '#3b82f6', '#1e40af']
-          }
+          type: 'value',
+          name: '累计成本 (USDT)'
         },
         series: [
           {
-            type: 'heatmap',
-            data: data,
-            label: { show: false },
-            emphasis: {
-              itemStyle: {
-                shadowBlur: 10,
-                shadowColor: 'rgba(0, 0, 0, 0.5)'
-              }
-            }
+            name: 'Binance手续费',
+            type: 'line',
+            stack: 'cost',
+            data: data.map(d => d.binance.toFixed(4))
+          },
+          {
+            name: 'Uniswap手续费',
+            type: 'line',
+            stack: 'cost',
+            data: data.map(d => d.uniswap.toFixed(4))
+          },
+          {
+            name: 'Gas成本',
+            type: 'line',
+            stack: 'cost',
+            data: data.map(d => d.gas.toFixed(4))
+          },
+          {
+            name: '总成本',
+            type: 'line',
+            data: data.map(d => d.total.toFixed(4)),
+            lineStyle: { width: 2 }
           }
         ]
       }
-    }
-  },
-
-  mounted() {
-    if (this.priceData || this.spreadData) {
-      this.loadFromStore()
-    }
-  },
-
-  methods: {
-    loadFromStore() {
-      if (this.spreadData && this.spreadData.length > 0) {
-        this.hasData = true
-        this.updateStats()
-        this.runQualityCheck()
-        this.generateReport()
-      }
     },
-
-    loadSampleData() {
-      this.importing = true
-      this.closeImportDialog()
+    
+    calculateHistogram(data, bins) {
+      const min = Math.min(...data)
+      const max = Math.max(...data)
+      const binWidth = (max - min) / bins
+      const histogram = new Array(bins).fill(0)
       
-      setTimeout(() => {
-        this.loadFromStore()
-        this.importing = false
-      }, 1500)
-    },
-
-    updateStats() {
-      if (this.spreadData) {
-        this.stats.totalRecords = this.spreadData.length
-        
-        const spreads = this.spreadData.map(d => d.spread)
-        const avgSpread = spreads.reduce((a, b) => a + b, 0) / spreads.length
-        this.stats.avgSpread = avgSpread.toFixed(2) + ' USDT'
-
-        if (this.spreadData.length > 0) {
-          const firstDate = new Date(this.spreadData[0].t)
-          const lastDate = new Date(this.spreadData[this.spreadData.length - 1].t)
-          this.stats.timeRange = `${firstDate.getMonth()+1}/${firstDate.getDate()} - ${lastDate.getMonth()+1}/${lastDate.getDate()}`
-        }
-
-        this.stats.opportunities = this.signals ? this.signals.length : Math.floor(Math.random() * 50 + 10)
-      }
-    },
-
-    runQualityCheck() {
-      this.qualityChecks.completeness = { value: 95 + Math.floor(Math.random() * 5), status: 'good' }
-      this.qualityChecks.accuracy = { value: 92 + Math.floor(Math.random() * 8), status: 'good' }
-      this.qualityChecks.consistency = { value: 88 + Math.floor(Math.random() * 10), status: Math.random() > 0.8 ? 'warning' : 'good' }
-    },
-
-    getOverallQuality() {
-      const total = this.qualityChecks.completeness.value + 
-                   this.qualityChecks.accuracy.value + 
-                   this.qualityChecks.consistency.value
-      return Math.round(total / 3)
-    },
-
-    getQualityColor() {
-      const quality = this.getOverallQuality()
-      if (quality >= 95) return 'excellent'
-      if (quality >= 85) return 'good'
-      if (quality >= 70) return 'warning'
-      return 'danger'
-    },
-
-    generateReport() {
-      if (!this.spreadData || this.spreadData.length === 0) return
-
-      const spreads = this.spreadData.map(d => d.spread)
-      const avgSpread = spreads.reduce((a, b) => a + b, 0) / spreads.length
-      const maxSpread = Math.max(...spreads)
-
-      this.report.basicStats = {
-        timeRange: this.stats.timeRange,
-        totalPairs: this.stats.totalRecords.toLocaleString(),
-        avgSpread: avgSpread.toFixed(2) + ' USDT',
-        maxSpread: maxSpread.toFixed(2) + ' USDT'
-      }
-
-      this.report.arbAnalysis = {
-        opportunities: this.stats.opportunities,
-        avgReturn: (Math.random() * 2 + 0.5).toFixed(2) + '%',
-        bestTime: '14:00-16:00',
-        riskLevel: 'low',
-        riskLevelText: '低风险'
-      }
-    },
-
-    importData() {
-      this.showImportDialog = true
-    },
-
-    closeImportDialog() {
-      this.showImportDialog = false
-      this.selectedFile = null
-    },
-
-    onFileSelected(event) {
-      this.selectedFile = event.target.files[0]
-    },
-
-    processImport() {
-      if (!this.selectedFile) return
-
-      this.importing = true
-      setTimeout(() => {
-        this.importing = false
-        this.closeImportDialog()
-        this.loadFromStore()
-      }, 2000)
-    },
-
-    importFromAPI() {
-      alert('API导入功能开发中...')
-    },
-
-    exportData() {
-      if (!this.hasData) return
-
-      const dataStr = JSON.stringify({
-        spreadData: this.spreadData,
-        stats: this.stats,
-        qualityChecks: this.qualityChecks,
-        report: this.report
-      }, null, 2)
+      data.forEach(value => {
+        const binIndex = Math.min(Math.floor((value - min) / binWidth), bins - 1)
+        histogram[binIndex]++
+      })
       
-      const blob = new Blob([dataStr], { type: 'application/json' })
+      return histogram.map((count, i) => [min + i * binWidth, count])
+    },
+    
+    formatTime(timestamp) {
+      return new Date(timestamp).toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    },
+    
+    getStatusIcon(status) {
+      switch (status) {
+        case 'processing': return '⏳'
+        case 'completed': return '✓'
+        default: return '○'
+      }
+    },
+    
+    exportSignals() {
+      if (this.generatedSignals.length === 0) return
+      
+      const csv = this.signalsToCSV()
+      const blob = new Blob([csv], { type: 'text/csv' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `data_analysis_${Date.now()}.json`
+      link.download = `arbitrage_signals_${Date.now()}.csv`
       link.click()
       URL.revokeObjectURL(url)
     },
 
-    exportReport() {
-      alert('报告导出功能开发中...')
+    signalsToCSV() {
+      const header = '时间,方向,毛利润,总成本,净利润,置信度\n'
+      const rows = this.generatedSignals.map(s => 
+        `${new Date(s.timestamp).toISOString()},${s.direction},${s.grossProfit},${s.totalCost},${s.netProfit},${s.confidence}`
+      ).join('\n')
+      return header + rows
     },
-
-    clearData() {
-      if (confirm('确定要清空所有数据吗？')) {
-        this.hasData = false
-        this.stats = {
-          totalRecords: 0,
-          timeRange: '-',
-          avgSpread: '-',
-          opportunities: 0
-        }
-        this.qualityChecks = {
-          completeness: { value: 0, status: 'good' },
-          accuracy: { value: 0, status: 'good' },
-          consistency: { value: 0, status: 'good' }
-        }
-      }
-    },
-
-    formatFileSize(bytes) {
-      if (bytes === 0) return '0 Bytes'
-      const k = 1024
-      const sizes = ['Bytes', 'KB', 'MB', 'GB']
-      const i = Math.floor(Math.log(bytes) / Math.log(k))
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+    
+    delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms))
     }
   }
 }
 </script>
 
 <style lang="scss" scoped>
-.market-compare-page {
-  min-height: 100vh;
-  background: $bg-primary;
+.algorithm-visualization-page {
   padding: 24px;
+  background: $bg-primary;
+  min-height: 100vh;
 }
 
-// 顶部状态栏
-.top-status-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
-  margin-bottom: 24px;
-}
-
-.status-card {
-  background: linear-gradient(135deg, $bg-card 0%, rgba($color-primary, 0.03) 100%);
+// 控制面板
+.control-panel {
+  background: $bg-card;
   border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  box-shadow: $shadow-sm;
-  border: 1px solid $border-color;
-  transition: all $transition-fast;
-
-  &:hover {
-    box-shadow: $shadow-md;
-    transform: translateY(-2px);
-  }
-
-  .status-icon {
-    font-size: 36px;
-    flex-shrink: 0;
-  }
-
-  .status-content {
-    flex: 1;
-  }
-
-  .status-value {
-    font-size: 28px;
-    font-weight: 700;
-    color: $text-primary;
-    line-height: 1;
-    margin-bottom: 4px;
-
-    &.excellent { color: $color-success; }
-    &.good { color: $color-primary; }
-    &.warning { color: $color-warning; }
-    &.danger { color: $color-danger; }
-  }
-
-  .status-label {
-    font-size: 13px;
-    color: $text-secondary;
-  }
-}
-
-// 主仪表盘内容
-.dashboard-content {
+  padding: 24px;
+  margin-bottom: 24px;
   display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 24px;
-  align-items: start;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  border: 1px solid $border-color;
 
   @media (max-width: 1024px) {
     grid-template-columns: 1fr;
   }
 }
 
-// 左侧边栏
-.sidebar {
-  position: sticky;
-  top: 24px;
-
-  .card {
-    margin-bottom: 0;
-  }
-}
-
-.tool-section {
-  margin-bottom: 24px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid $border-color;
-
-  &:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-    padding-bottom: 0;
-  }
-
-  h4 {
-    font-size: 14px;
+.control-section {
+  h3 {
+    font-size: 16px;
     font-weight: 600;
     color: $text-primary;
     margin: 0 0 16px 0;
   }
-
-  .w-full {
-    width: 100%;
-    margin-bottom: 8px;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
-
-  .btn-text {
-    width: 100%;
-    background: transparent;
-    color: $color-primary;
-    border: none;
-    padding: 8px 0;
-    text-align: center;
-    font-size: 14px;
-    cursor: pointer;
-    margin-top: 8px;
-
-    &:hover {
-      color: darken($color-primary, 10%);
-    }
-  }
 }
 
-// 质量检查面板
-.quality-panel {
-  margin-bottom: 16px;
+.params-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
 }
 
-.quality-bar {
-  margin-bottom: 16px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-.quality-bar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  font-size: 13px;
-
-  span:first-child {
+.param-item {
+  label {
+    display: block;
+    font-size: 13px;
     color: $text-secondary;
+    margin-bottom: 8px;
   }
+}
 
-  .quality-percent {
-    font-weight: 600;
-    color: $text-primary;
-  }
+.control-buttons {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.progress-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .progress-bar {
+  flex: 1;
   height: 8px;
   background: $bg-primary;
   border-radius: 4px;
@@ -1019,548 +978,507 @@ export default {
 
 .progress-fill {
   height: 100%;
+  background: linear-gradient(90deg, $color-primary, $color-success);
   transition: width 0.3s ease;
-
-  &.good {
-    background: linear-gradient(90deg, $color-success, lighten($color-success, 10%));
-  }
-
-  &.warning {
-    background: linear-gradient(90deg, $color-warning, lighten($color-warning, 10%));
-  }
-
-  &.danger {
-    background: linear-gradient(90deg, $color-danger, lighten($color-danger, 10%));
-  }
 }
 
-// 时间显示
-.time-display {
-  padding: 16px;
-  background: $bg-primary;
-  border-radius: 8px;
-  text-align: center;
-
-  .time-value {
+.progress-text {
     font-size: 14px;
     font-weight: 600;
     color: $text-primary;
-    margin-bottom: 4px;
-  }
-
-  .time-label {
-    font-size: 12px;
-    color: $text-secondary;
-  }
+  min-width: 60px;
 }
 
-// 右侧图表区域
-.charts-area {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-// 空状态
-.dashboard-empty {
-  background: $bg-card;
-  border-radius: 12px;
-  padding: 80px 40px;
-  text-align: center;
-  box-shadow: $shadow-sm;
-  border: 1px solid $border-color;
-}
-
-.empty-illustration {
-  position: relative;
-  display: inline-block;
-  margin-bottom: 32px;
-}
-
-.empty-circle {
-  width: 120px;
-  height: 120px;
-  background: linear-gradient(135deg, rgba($color-primary, 0.1) 0%, rgba($color-accent, 0.1) 100%);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: pulse 2s ease-in-out infinite;
-
-  .empty-icon {
-    font-size: 48px;
-  }
-}
-
-.empty-rays {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 160px;
-  height: 160px;
-
-  .ray {
-    position: absolute;
-    width: 4px;
-    height: 20px;
-    background: linear-gradient(to top, transparent, rgba($color-primary, 0.3));
-    border-radius: 2px;
-
-    &:nth-child(1) {
-      top: 0;
-      left: 50%;
-      transform: translateX(-50%);
-    }
-
-    &:nth-child(2) {
-      right: 0;
-      top: 50%;
-      transform: translateY(-50%) rotate(90deg);
-    }
-
-    &:nth-child(3) {
-      bottom: 0;
-      left: 50%;
-      transform: translateX(-50%) rotate(180deg);
-    }
-
-    &:nth-child(4) {
-      left: 0;
-      top: 50%;
-      transform: translateY(-50%) rotate(270deg);
-    }
-  }
-}
-
-.empty-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: $text-primary;
-  margin: 0 0 12px 0;
-}
-
-.empty-description {
-  font-size: 16px;
-  color: $text-secondary;
-  margin: 0 0 32px 0;
-  max-width: 400px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.empty-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 32px;
-  background: linear-gradient(135deg, $color-primary 0%, darken($color-primary, 10%) 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all $transition-fast;
-  box-shadow: 0 4px 12px rgba($color-primary, 0.3);
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba($color-primary, 0.4);
-  }
-
-  .btn-icon {
-    font-size: 20px;
-  }
-}
-
-// 概览卡片
-.overview-cards {
+// 主内容区域
+.main-content {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 20px;
-}
-
-.overview-card {
-  background: $bg-card;
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  box-shadow: $shadow-sm;
-  border: 1px solid $border-color;
-  transition: all $transition-fast;
-
-  &:hover {
-    box-shadow: $shadow-md;
-    transform: translateY(-2px);
-  }
-
-  .card-icon {
-    font-size: 32px;
-    flex-shrink: 0;
-  }
-
-  .card-content {
-    flex: 1;
-  }
-
-  .card-value {
-    font-size: 24px;
-    font-weight: 700;
-    color: $text-primary;
-    margin-bottom: 4px;
-  }
-
-  .card-label {
-    font-size: 13px;
-    color: $text-secondary;
-    margin-bottom: 8px;
-  }
-
-  .card-trend {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 600;
-
-    &.positive {
-      background: rgba($color-success, 0.1);
-      color: $color-success;
-    }
-
-    &.negative {
-      background: rgba($color-danger, 0.1);
-      color: $color-danger;
-    }
-  }
-}
-
-// 图表网格
-.charts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  grid-template-columns: 280px 1fr 320px;
   gap: 24px;
+  margin-bottom: 24px;
+
+  @media (max-width: 1400px) {
+    grid-template-columns: 250px 1fr 280px;
+  }
 
   @media (max-width: 1024px) {
     grid-template-columns: 1fr;
   }
 }
 
-.chart-widget {
-  background: $bg-card;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: $shadow-sm;
-  border: 1px solid $border-color;
+// 算法流程图 - 进度条样式
+.algorithm-flow {
+  .flow-diagram {
+    padding: 20px 0;
+    position: relative;
+  }
 }
 
-.widget-header {
+.flow-step {
+  position: relative;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+  align-items: flex-start;
+  margin-bottom: 0;
+  padding-left: 20px;
+  padding-right: 12px;
+  padding-bottom: 24px;
 
-  h4 {
-    font-size: 16px;
-    font-weight: 600;
-    color: $text-primary;
-    margin: 0;
+  &:last-child {
+    padding-bottom: 0;
   }
 
-  .widget-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .widget-btn {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: 1px solid $border-color;
-    border-radius: 6px;
-    color: $text-secondary;
-    cursor: pointer;
-    transition: all $transition-fast;
-
-    &:hover {
+  &.active {
+    .step-indicator {
+      background: linear-gradient(135deg, $color-primary, lighten($color-primary, 10%));
       border-color: $color-primary;
+      box-shadow: 0 0 0 4px rgba($color-primary, 0.2);
+      animation: pulse-ring 2s ease-in-out infinite;
+    }
+
+    .step-title {
       color: $color-primary;
+      font-weight: 700;
+    }
+  }
+
+  &.completed {
+    .step-indicator {
+      background: linear-gradient(135deg, $color-success, lighten($color-success, 10%));
+      border-color: $color-success;
+    }
+
+    .step-title {
+    color: $text-primary;
+  }
+}
+
+  &.pending {
+    .step-indicator {
+  background: $bg-primary;
+      border-color: $border-color;
+    }
+
+    .step-title,
+    .step-desc {
+      color: $text-tertiary;
+      opacity: 0.6;
     }
   }
 }
 
-// 分析报告
-.analysis-report {
-  background: $bg-card;
-  border-radius: 12px;
-  box-shadow: $shadow-sm;
+// 进度条连接线
+.progress-line {
+  position: absolute;
+  left: 29px;
+  top: 40px;
+  width: 2px;
+  height: calc(100% - 20px);
+  background: $border-color;
+  transition: all 0.3s ease;
+  z-index: 0;
+
+  &.completed {
+    background: linear-gradient(180deg, $color-success, lighten($color-success, 10%));
+    box-shadow: 0 0 4px rgba($color-success, 0.3);
+  }
+
+  &.active {
+    background: linear-gradient(180deg, $color-success, $color-primary);
+    box-shadow: 0 0 6px rgba($color-primary, 0.4);
+  }
+}
+
+// 步骤节点
+.step-node {
+  position: relative;
+  z-index: 1;
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.step-indicator {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid;
+  transition: all 0.3s ease;
+  position: relative;
+
+  .step-number {
+    font-size: 16px;
+    font-weight: 700;
+    color: white;
+  }
+
+  .check-icon {
+    font-size: 20px;
+    color: white;
+    font-weight: 700;
+  }
+
+  &.active {
+    transform: scale(1.1);
+  }
+
+  &.completed {
+    .step-number {
+      display: none;
+    }
+  }
+
+  &.pending {
+    .step-number {
+      color: $text-tertiary;
+    }
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 4px rgba($color-primary, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba($color-primary, 0.1);
+  }
+  100% {
+    box-shadow: 0 0 0 4px rgba($color-primary, 0.2);
+  }
+}
+
+// 步骤内容
+.step-content {
+  flex: 1;
+  padding-top: 4px;
+}
+
+.step-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: $text-primary;
+  margin-bottom: 6px;
+  transition: all 0.3s ease;
+}
+
+.step-desc {
+  font-size: 12px;
+  color: $text-secondary;
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+
+.step-data {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: $color-primary;
+  margin-top: 8px;
+  font-weight: 500;
+  padding: 6px 10px;
+  background: rgba($color-primary, 0.08);
+  border-radius: 4px;
+  border-left: 2px solid $color-primary;
+
+  .data-icon {
+    font-size: 12px;
+  }
+}
+
+// 数据可视化
+.data-visualization {
+  .time-buckets-container {
+    max-height: 800px;
+    overflow-y: auto;
+  }
+}
+
+.time-bucket-item {
+  background: $bg-primary;
   border: 1px solid $border-color;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  &:hover {
+    border-color: $color-primary;
+    box-shadow: $shadow-sm;
+  }
+
+  &.processing {
+    border-color: $color-warning;
+    background: rgba($color-warning, 0.05);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  &.completed {
+    border-color: $color-success;
+  }
+
+  &.expanded {
+    border-color: $color-primary;
+    box-shadow: $shadow-md;
+  }
 }
 
-.report-content {
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.bucket-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+}
+
+.bucket-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.bucket-time {
+  font-size: 14px;
+    font-weight: 600;
+    color: $text-primary;
+}
+
+.bucket-swaps,
+.bucket-spread {
+  font-size: 12px;
+  color: $text-secondary;
+}
+
+.bucket-status {
+    display: flex;
+    align-items: center;
+  gap: 8px;
+}
+
+.status-icon {
+  font-size: 20px;
+}
+
+.signal-badge {
+  padding: 4px 8px;
+  background: $color-success;
+  color: white;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.bucket-detail {
   padding: 20px;
+  border-top: 1px solid $border-color;
+  background: $bg-card;
 }
 
-.report-section {
-  margin-bottom: 32px;
+.calculation-section {
+  margin-bottom: 24px;
 
   &:last-child {
     margin-bottom: 0;
   }
 
   h4 {
-    font-size: 16px;
-    font-weight: 600;
-    color: $text-primary;
-    margin: 0 0 16px 0;
-  }
-}
-
-.report-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-}
-
-.report-item {
-  padding: 16px;
-  background: $bg-primary;
-  border-radius: 8px;
-  border: 1px solid $border-color;
-
-  label {
-    display: block;
-    font-size: 13px;
-    color: $text-secondary;
-    margin-bottom: 8px;
-  }
-
-  span {
-    font-size: 16px;
-    font-weight: 600;
-    color: $text-primary;
-  }
-
-  .risk-level {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 13px;
-
-    &.low {
-      background: rgba($color-success, 0.1);
-      color: $color-success;
-    }
-
-    &.medium {
-      background: rgba($color-warning, 0.1);
-      color: $color-warning;
-    }
-
-    &.high {
-      background: rgba($color-danger, 0.1);
-      color: $color-danger;
-    }
-  }
-}
-
-// Modal样式
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease;
-}
-
-.modal-content {
-  background: $bg-card;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 600px;
-  max-height: 80vh;
-  overflow: hidden;
-  box-shadow: $shadow-lg;
-  animation: slideUp 0.3s ease;
-}
-
-.modal-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid $border-color;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-
-  h3 {
-    font-size: 18px;
-    font-weight: 600;
-    color: $text-primary;
-    margin: 0;
-  }
-
-  .btn-close {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    color: $text-secondary;
-    padding: 0;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 6px;
-    transition: all $transition-fast;
-
-    &:hover {
-      background: $bg-primary;
-      color: $text-primary;
-    }
-  }
-}
-
-.modal-body {
-  padding: 24px;
-  max-height: calc(80vh - 80px);
-  overflow-y: auto;
-}
-
-.import-options {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.import-option {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 20px;
-  border: 2px solid $border-color;
-  border-radius: 8px;
-  transition: all $transition-fast;
-
-  &:hover {
-    border-color: $color-primary;
-    background: rgba($color-primary, 0.02);
-  }
-
-  .option-icon {
-    font-size: 36px;
-    flex-shrink: 0;
-  }
-
-  .option-content {
-    flex: 1;
-
-    h4 {
-      font-size: 16px;
-      font-weight: 600;
-      color: $text-primary;
-      margin: 0 0 4px 0;
-    }
-
-    p {
-      font-size: 14px;
-      color: $text-secondary;
-      margin: 0 0 12px 0;
-    }
-  }
-}
-
-.file-preview {
-  padding: 20px;
-  background: $bg-primary;
-  border-radius: 8px;
-  border: 1px solid $border-color;
-  margin-top: 16px;
-
-  h4 {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 600;
     color: $text-primary;
     margin: 0 0 12px 0;
   }
+}
 
-  .file-info {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 16px;
+.formula-box {
+  background: rgba($color-primary, 0.05);
+  border-left: 3px solid $color-primary;
+  padding: 12px 16px;
+  border-radius: 4px;
+}
 
-    span {
-      font-size: 14px;
+.formula {
+    font-size: 13px;
+    color: $text-secondary;
+    margin-bottom: 8px;
+  font-family: 'Courier New', monospace;
+  }
+
+.formula-result {
+  font-size: 14px;
+    color: $text-primary;
+
+  strong {
+    color: $color-primary;
+    font-size: 16px;
+  }
+}
+
+.swaps-table {
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+
+    th, td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid $border-color;
+    }
+
+    th {
+      background: $bg-primary;
+      font-weight: 600;
+      color: $text-primary;
+      position: sticky;
+      top: 0;
+    }
+
+    td {
       color: $text-secondary;
     }
   }
 }
 
-// 动画
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slideUp {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.btn-icon {
-  width: 32px;
-  height: 32px;
+.profit-comparison {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: rgba($color-primary, 0.05);
+  border-radius: 8px;
+}
+
+.profit-item {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid $border-color;
-  border-radius: 6px;
-  color: $text-secondary;
-  cursor: pointer;
-  transition: all $transition-fast;
-  
-  &:hover {
-    border-color: $color-primary;
-    color: $color-primary;
-    background: rgba($color-primary, 0.05);
+  font-size: 14px;
+
+  &.total {
+    padding-top: 12px;
+    border-top: 2px solid $border-color;
+    font-weight: 600;
+    font-size: 16px;
   }
+}
+
+.profit-label {
+    color: $text-secondary;
+}
+
+.profit-value {
+  font-weight: 600;
+
+  &.positive {
+    color: $color-success;
+  }
+
+  &.negative {
+    color: $color-danger;
+  }
+}
+
+.profit-divider {
+  text-align: center;
+  color: $border-color;
+  font-size: 20px;
+  margin: 4px 0;
+}
+
+.profit-judgment {
+  padding: 8px 16px;
+  border-radius: 6px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+
+  &.signal-yes {
+    background: rgba($color-success, 0.1);
+    color: $color-success;
+  }
+
+  &.signal-no {
+    background: rgba($color-danger, 0.1);
+    color: $color-danger;
+  }
+}
+
+// 统计面板
+.statistics-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: $bg-primary;
+  border-radius: 6px;
+}
+
+.stat-label {
+  font-size: 13px;
+      color: $text-secondary;
+}
+
+.stat-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: $text-primary;
+
+  &.positive {
+    color: $color-success;
+  }
+
+  &.negative {
+    color: $color-danger;
+  }
+}
+
+// 信号输出区
+.signals-output {
+  margin-top: 24px;
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  background: rgba($color-primary, 0.1);
+    color: $color-primary;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
 }
 </style>

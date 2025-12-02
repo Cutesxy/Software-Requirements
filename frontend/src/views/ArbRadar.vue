@@ -180,7 +180,7 @@
         <!-- 信号列表 -->
         <div class="card">
           <div class="card-header">
-            <h3>套利信号 ({{ signals.length || 0 }})</h3>
+            <h3>套利信号 ({{ filteredSignals.length || 0 }})</h3>
             <div class="header-actions">
               <select v-model="sortBy" class="select select-sm">
                 <option value="time">按时间</option>
@@ -356,10 +356,30 @@ export default {
   computed: {
     ...mapState(['signals']),
     
-    sortedSignals() {
+    // 获取9/1号的时间范围
+    targetDateRange() {
+      const targetDate = new Date(2025, 8, 1) // 2025年9月1日
+      const dayStart = new Date(targetDate)
+      dayStart.setHours(0, 0, 0, 0)
+      const dayEnd = new Date(targetDate)
+      dayEnd.setHours(23, 59, 59, 999)
+      return { dayStart, dayEnd }
+    },
+    
+    // 过滤9/1号的信号
+    filteredSignals() {
       if (!this.signals) return []
+      const { dayStart, dayEnd } = this.targetDateRange
+      return this.signals.filter(s => {
+        const signalDate = new Date(s.time)
+        return signalDate >= dayStart && signalDate <= dayEnd
+      })
+    },
+    
+    sortedSignals() {
+      if (!this.filteredSignals || this.filteredSignals.length === 0) return []
       
-      const sorted = [...this.signals]
+      const sorted = [...this.filteredSignals]
       
       switch (this.sortBy) {
         case 'profit':
@@ -373,20 +393,23 @@ export default {
     },
     
     totalProfit() {
-      if (!this.signals || this.signals.length === 0) return 0
-      return this.signals.reduce((sum, s) => sum + s.netProfit, 0)
+      if (!this.filteredSignals || this.filteredSignals.length === 0) return 0
+      return this.filteredSignals.reduce((sum, s) => sum + s.netProfit, 0)
     },
     
     avgConfidence() {
-      if (!this.signals || this.signals.length === 0) return 0
-      const sum = this.signals.reduce((sum, s) => sum + s.confidence, 0)
-      return sum / this.signals.length
+      if (!this.filteredSignals || this.filteredSignals.length === 0) return 0
+      const sum = this.filteredSignals.reduce((sum, s) => sum + s.confidence, 0)
+      return sum / this.filteredSignals.length
     },
     
     signalScatterOptions() {
-      if (!this.signals || this.signals.length === 0) return {}
-      
-      const data = this.signals.map(s => [
+      if (!this.filteredSignals || this.filteredSignals.length === 0) return {}
+
+      const { dayStart, dayEnd } = this.targetDateRange
+
+      // 显示过滤后的信号数据
+      const data = this.filteredSignals.map(s => [
         s.time, // X axis: Full timestamp
         Math.abs(s.spread),
         s.netProfit,
@@ -400,22 +423,26 @@ export default {
             if (!params.data || !Array.isArray(params.data)) return ''
             const [time, spread, profit, confidence] = params.data
             const date = new Date(time)
-            const timeStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`
-            return `时间: ${timeStr}<br/>价差: ${spread.toFixed(2)}<br/>收益: ${profit.toFixed(2)}<br/>置信度: ${(confidence * 100).toFixed(0)}%`
+            const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+            return `时间: ${timeStr}<br/>价差: ${spread.toFixed(2)} USDT<br/>收益: ${profit.toFixed(2)} USDT<br/>置信度: ${(confidence * 100).toFixed(0)}%`
           },
           backgroundColor: 'rgba(255, 255, 255, 0.95)',
           borderColor: '#e5e7eb',
           textStyle: { color: '#111827' }
         },
         xAxis: {
-          type: 'time', // Change to time axis
+          type: 'time',
           name: '时间',
           nameTextStyle: { color: '#6b7280' },
+          scale: true,
+          boundaryGap: false,
+          min: dayStart.getTime(), // 限制为9/1 00:00
+          max: dayEnd.getTime(),    // 限制为9/1 24:00
           axisLabel: { 
             color: '#6b7280',
             formatter: (value) => {
               const date = new Date(value)
-              return `${date.getMonth()+1}/${date.getDate()}\n${date.getHours()}:00`
+              return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
             }
           },
           axisLine: { lineStyle: { color: '#e5e7eb' } },
@@ -459,6 +486,21 @@ export default {
   },
   
   created() {
+    // 设置时间范围为9/1号（00:00到24:00）
+    const targetDate = new Date(2025, 8, 1) // 2025年9月1日
+    const startTime = new Date(targetDate)
+    startTime.setHours(0, 0, 0, 0)
+    const endTime = new Date(targetDate)
+    endTime.setHours(23, 59, 59, 999)
+    
+    // 更新store中的时间范围
+    this.$store.dispatch('updateConfig', {
+      timeRange: {
+        start: startTime.getTime(),
+        end: endTime.getTime()
+      }
+    })
+    
     // 从Store同步当前的检测器参数
     const storeParams = this.$store.state.config.detector
     if (storeParams) {

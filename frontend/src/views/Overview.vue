@@ -11,46 +11,72 @@
           <div class="param-section">
             <label class="param-label">
               时间范围
-              <span class="param-tooltip" title="支持2025年9月内的自定义时间范围选择">ℹ️</span>
+              <span class="param-tooltip" title="支持2025年9月内的日期选择">ℹ️</span>
             </label>
 
-            <!-- 快捷选择按钮 -->
-            <div class="time-quick-select">
+            <!-- 模式切换按钮 -->
+            <div class="time-mode-select">
               <button
-                class="btn-time-preset"
-                :class="{ active: timePreset === 'full' }"
-                @click="selectTimePreset('full')"
+                class="btn-mode"
+                :class="{ active: timeMode === 'single' }"
+                @click="switchTimeMode('single')"
               >
-                全月
+                单天
               </button>
               <button
-                class="btn-time-preset"
-                :class="{ active: timePreset === 'first-half' }"
-                @click="selectTimePreset('first-half')"
+                class="btn-mode"
+                :class="{ active: timeMode === 'range' }"
+                @click="switchTimeMode('range')"
               >
-                上半月
+                范围
               </button>
-              <button
-                class="btn-time-preset"
-                :class="{ active: timePreset === 'second-half' }"
-                @click="selectTimePreset('second-half')"
-              >
-                下半月
-              </button>
-              <button
-                class="btn-time-preset"
-                :class="{ active: timePreset === 'custom' }"
-                @click="selectTimePreset('custom')"
-              >
-                自定义
-              </button>
+            </div>
+
+            <!-- 嵌入的日历 -->
+            <div class="embedded-calendar">
+              <div class="calendar-month-header">
+                <span class="month-title">2025年9月</span>
+              </div>
+              
+              <!-- 星期标题 -->
+              <div class="calendar-weekdays">
+                <div v-for="day in ['日', '一', '二', '三', '四', '五', '六']" :key="day" class="weekday">
+                  {{ day }}
+                </div>
+              </div>
+
+              <!-- 日期网格 -->
+              <div class="calendar-days-grid">
+                <div
+                  v-for="day in calendarDays"
+                  :key="day.date ? day.date.getTime() : `empty-${day.index}`"
+                  class="calendar-day-cell"
+                  :class="{
+                    'disabled': !day.enabled,
+                    'selected': day.selected,
+                    'in-range': day.inRange,
+                    'range-start': day.isStart,
+                    'range-end': day.isEnd,
+                    'today': day.isToday
+                  }"
+                  @click="handleDayClick(day)"
+                >
+                  {{ day.date ? day.date.getDate() : '' }}
+                </div>
+              </div>
             </div>
 
             <!-- 当前选择显示 -->
             <div class="time-range-display">
-              <span class="time-range-text">{{ customRangeLabel }}</span>
-              <button class="btn-calendar-toggle" @click="toggleCalendar" :disabled="!isCustomMode">
-                📅
+              <span class="time-range-text">{{ currentSelectionLabel }}</span>
+              <button 
+                v-if="timeMode === 'range'" 
+                class="btn-confirm-range" 
+                @click.stop="confirmRangeSelection"
+                :disabled="loading || !hasRangeSelection"
+                :title="!hasRangeSelection ? '请先选择开始和结束日期' : ''"
+              >
+                {{ loading ? '加载中...' : '确定' }}
               </button>
             </div>
           </div>
@@ -64,27 +90,23 @@
           </div>
 
           <div class="param-section">
-            <label class="param-label">
-              DEX池
-              <span class="param-tooltip" title="选择要分析的Uniswap V3流动性池，不同费率对应不同的流动性深度和滑点">ℹ️</span>
+            <div class="checkbox-item">
+              <input type="checkbox" id="showDex" v-model="showDex" />
+              <label for="showDex">
+                DEX池 (Uniswap V3)
+                <span class="param-tooltip" title="显示/隐藏 Uniswap V3 价格线">ℹ️</span>
             </label>
-            <select v-model="dexPool" class="input" @change="onDexPoolChange">
-              <option>Uniswap V3 (0.3%)</option>
-              <option>Uniswap V3 (0.05%)</option>
-              <option>Uniswap V3 (1%)</option>
-            </select>
+            </div>
           </div>
 
           <div class="param-section">
-            <label class="param-label">
-              CEX交易所
-              <span class="param-tooltip" title="Binance根据VIP等级和BNB抵扣有不同的手续费率">ℹ️</span>
+            <div class="checkbox-item">
+              <input type="checkbox" id="showCex" v-model="showCex" />
+              <label for="showCex">
+                CEX交易所 (Binance)
+                <span class="param-tooltip" title="显示/隐藏 Binance 价格线">ℹ️</span>
             </label>
-            <select v-model="cexExchange" class="input" @change="onCexExchangeChange">
-              <option>Binance (0.1%)</option>
-              <option>Binance (0.075%)</option>
-              <option>Binance (0.05%)</option>
-            </select>
+            </div>
           </div>
           
           <button class="btn btn-primary w-full" @click="startAnalysis" :disabled="loading">
@@ -160,75 +182,10 @@
         </div>
       </aside>
 
-      <!-- 自定义时间日历组件 -->
-      <div
-        v-if="showCalendar"
-        class="calendar-overlay"
-        @click.self="hideCalendar"
-      >
-        <div class="calendar-popup">
-          <div class="calendar-header">
-            <h4>选择时间范围 (2025年9月)</h4>
-            <button class="btn-close" @click="hideCalendar">×</button>
-          </div>
-
-          <div class="calendar-body">
-            <!-- 月历网格 -->
-            <div class="calendar-grid">
-              <!-- 星期标题 -->
-              <div class="calendar-weekdays">
-                <div v-for="day in ['日', '一', '二', '三', '四', '五', '六']" :key="day" class="weekday">
-                  {{ day }}
-                </div>
-              </div>
-
-              <!-- 日期网格 -->
-              <div class="calendar-days">
-                <div
-                  v-for="day in calendarDays"
-                  :key="day.date"
-                  class="calendar-day"
-                  :class="{
-                    'disabled': !day.enabled,
-                    'selected': day.selected,
-                    'in-range': day.inRange,
-                    'range-start': day.isStart,
-                    'range-end': day.isEnd
-                  }"
-                  @click="selectDay(day)"
-                >
-                  {{ day.date ? day.date.getDate() : '' }}
-                </div>
-              </div>
-            </div>
-
-            <!-- 快速选择 -->
-            <div class="calendar-presets">
-              <button class="btn-preset" @click="applyPreset('week1')">第1周</button>
-              <button class="btn-preset" @click="applyPreset('week2')">第2周</button>
-              <button class="btn-preset" @click="applyPreset('week3')">第3周</button>
-              <button class="btn-preset" @click="applyPreset('week4')">第4周</button>
-              <button class="btn-preset" @click="applyPreset('week5')">第5周</button>
-            </div>
-          </div>
-
-          <div class="calendar-footer">
-            <div class="selected-range">
-              <span>已选择: {{ selectedRangeText }}</span>
-            </div>
-            <div class="calendar-actions">
-              <button class="btn btn-secondary" @click="clearSelection">清空</button>
-              <button class="btn btn-primary" @click="confirmSelection" :disabled="!hasValidSelection">
-                确定
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <!-- 右侧主图表区 -->
       <main class="main-content col-span-9">
-        <!-- 价格对比图 -->
+        <!-- 价格对比图（所有模式都显示折线图） -->
         <div class="card">
           <div class="card-header">
             <h3>Uniswap vs Binance 价格对比</h3>
@@ -251,11 +208,40 @@
           </div>
           <chart-card
             title=""
-            :height="400"
+            :height="800"
             :options="priceCompareOptions"
             :loading="loading"
           />
         </div>
+
+        <!-- 单天模式：在价格对比图下方显示两个K线图（按小时） -->
+        <template v-if="timeMode === 'single'">
+          <!-- Uniswap V3 K线图 -->
+          <div v-if="showDex" class="card" style="margin-top: 24px;">
+            <div class="card-header">
+              <h3>Uniswap V3 价格K线图（按小时）</h3>
+            </div>
+            <chart-card
+              title=""
+              :height="400"
+              :options="dexCandlestickOptions"
+              :loading="loading"
+            />
+          </div>
+          
+          <!-- Binance K线图 -->
+          <div v-if="showCex" class="card" style="margin-top: 24px;">
+            <div class="card-header">
+              <h3>Binance 价格K线图（按小时）</h3>
+            </div>
+            <chart-card
+              title=""
+              :height="400"
+              :options="cexCandlestickOptions"
+              :loading="loading"
+            />
+          </div>
+        </template>
         
         <!-- 下方图表组 -->
         <div class="charts-grid" style="margin-top: 24px;">
@@ -372,6 +358,7 @@
 <script>
 import { mapState, mapActions } from 'vuex'
 import ChartCard from '@/components/ChartCard.vue'
+import processedDataLoader from '@/utils/processedDataLoader'
 
 
 
@@ -385,15 +372,18 @@ export default {
   data() {
     return {
       loading: false,
-      dexPool: 'Uniswap V3 (0.3%)',
-      cexExchange: 'Binance (0.1%)',
+      showDex: true, // 是否显示 DEX 价格线
+      showCex: true, // 是否显示 CEX 价格线
       logScale: false,
-      showRadar: true,
-      showPie: true,
-      showHeatmap: true,
-      showVolumeChart: true,
-      showSpreadDist: true,
-      showCorrelation: true,
+      candlestickOptions: null, // K线图配置（范围模式使用，已废弃）
+      dexCandlestickOptions: null, // Uniswap V3 K线图配置（范围模式）
+      cexCandlestickOptions: null, // Binance K线图配置（范围模式）
+      showRadar: false,
+      showPie: false,
+      showHeatmap: false,
+      showVolumeChart: false,
+      showSpreadDist: false,
+      showCorrelation: false,
 
       stats: {
         signalCount: 0,
@@ -402,59 +392,48 @@ export default {
       },
 
       // 时间选择相关
-      timePreset: 'full', // full, first-half, second-half, custom
-      showCalendar: false,
-      selectedDates: [], // 选中的日期数组
-      calendarDays: [], // 日历天数数据
-      customRange: {
-        start: '2025-09-01',
-        end: '2025-09-30'
-      }
+      timeMode: 'single', // 'single' 单天模式, 'range' 范围模式
+      selectedDate: new Date(2025, 8, 1), // 单天模式选中的日期（默认9月1日）
+      rangeStartDate: null, // 范围模式开始日期
+      rangeEndDate: null, // 范围模式结束日期
+      calendarDays: [] // 日历天数数据
     }
   },
   
   computed: {
     ...mapState(['priceData', 'spreadData', 'signals']),
 
-    customRangeLabel() {
-      if (this.timePreset === 'full') {
-        return '2025年9月1日 - 2025年9月30日'
-      } else if (this.timePreset === 'first-half') {
-        return '2025年9月1日 - 2025年9月15日'
-      } else if (this.timePreset === 'second-half') {
-        return '2025年9月16日 - 2025年9月30日'
-      } else if (this.timePreset === 'custom') {
-        const startDate = new Date(this.customRange.start)
-        const endDate = new Date(this.customRange.end)
-        return `${startDate.getFullYear()}年${startDate.getMonth() + 1}月${startDate.getDate()}日 - ${endDate.getFullYear()}年${endDate.getMonth() + 1}月${endDate.getDate()}日`
-      }
-      return '请选择时间范围'
-    },
-
-    isCustomMode() {
-      return this.timePreset === 'custom'
-    },
-
-    selectedRangeText() {
-      if (this.selectedDates.length === 0) return '未选择'
-      if (this.selectedDates.length === 1) {
-        const date = this.selectedDates[0]
-        return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
-      }
-      const sorted = [...this.selectedDates].sort((a, b) => a - b)
-      const start = sorted[0]
-      const end = sorted[sorted.length - 1]
+    currentSelectionLabel() {
+      if (this.timeMode === 'single') {
+        if (this.selectedDate) {
+          return `当前查看: ${this.selectedDate.getFullYear()}年${this.selectedDate.getMonth() + 1}月${this.selectedDate.getDate()}日`
+        }
+        return '请选择日期'
+      } else {
+        // 范围模式
+        if (this.rangeStartDate && this.rangeEndDate) {
+          const start = this.rangeStartDate
+          const end = this.rangeEndDate
       return `${start.getFullYear()}年${start.getMonth() + 1}月${start.getDate()}日 - ${end.getFullYear()}年${end.getMonth() + 1}月${end.getDate()}日`
+        } else if (this.rangeStartDate) {
+          const start = this.rangeStartDate
+          return `已选择开始: ${start.getFullYear()}年${start.getMonth() + 1}月${start.getDate()}日，请选择结束日期`
+        }
+        return '请选择日期范围'
+      }
     },
 
-    hasValidSelection() {
-      return this.selectedDates.length >= 1
+    hasRangeSelection() {
+      return this.rangeStartDate !== null && this.rangeEndDate !== null
     },
 
     
     priceCompareOptions() {
+      // 所有模式都需要 priceData
       if (!this.priceData) return null
 
+      // 单天模式：显示折线图
+      // 完全按照原始数据绘制，不进行任何采样
       const dexData = this.priceData.dex.map(d => [d.t, d.p])
       const cexData = this.priceData.cex.map(d => [d.t, d.p])
 
@@ -472,7 +451,14 @@ export default {
           containLabel: true
         },
         legend: {
-          data: ['Uniswap V3', 'Binance'],
+          data: [
+            ...(this.showDex ? ['Uniswap V3'] : []),
+            ...(this.showCex ? ['Binance'] : [])
+          ].filter(name => {
+            // 在同步版本中，总是显示选中的legend，即使暂时没有数据
+            // 因为数据可能还在加载中
+            return true
+          }),
           top: 10,
           textStyle: { color: '#6b7280' }
         },
@@ -511,6 +497,8 @@ export default {
           type: this.logScale ? 'log' : 'value',
           name: 'Price (USDT)',
           nameTextStyle: { color: '#6b7280' },
+          min: 0, // 最小值
+          max: 9000, // 最大值
           axisLabel: {
             color: '#6b7280',
             formatter: (value) => value.toFixed(2)
@@ -519,12 +507,13 @@ export default {
           axisLine: { lineStyle: { color: '#e5e7eb' } }
         },
         series: [
-          {
+          // 根据复选框条件添加 Uniswap V3 系列
+          ...(this.showDex ? [{
             name: 'Uniswap V3',
             type: 'line',
             data: dexData,
             symbol: 'none',
-            lineStyle: { color: '#3b82f6', width: 2 },
+            lineStyle: { color: '#3b82f6', width: 2 }, // 细线
             areaStyle: {
               color: {
                 type: 'linear',
@@ -535,14 +524,15 @@ export default {
                 ]
               }
             },
-            smooth: true
-          },
-          {
+            smooth: false // 不使用平滑，完全按照原始数据点绘制
+          }] : []),
+          // 根据复选框条件添加 Binance 系列
+          ...(this.showCex ? [{
             name: 'Binance',
             type: 'line',
             data: cexData,
             symbol: 'none',
-            lineStyle: { color: '#10b981', width: 2 },
+            lineStyle: { color: '#10b981', width: 1 }, // 更细的线
             areaStyle: {
               color: {
                 type: 'linear',
@@ -553,8 +543,8 @@ export default {
                 ]
               }
             },
-            smooth: true
-          }
+            smooth: false // 不使用平滑，完全按照原始数据点绘制
+          }] : [])
         ]
       }
     },
@@ -639,7 +629,7 @@ export default {
           data: [{
             value: radarData.map(d => d.value),
             name: '套利指标',
-            lineStyle: { color: '#3b82f6', width: 2 },
+            lineStyle: { color: '#3b82f6', width: 1.5 }, // 细线
             areaStyle: { color: 'rgba(59, 130, 246, 0.4)' },
             itemStyle: { color: '#3b82f6' },
             symbolSize: 6
@@ -793,11 +783,17 @@ export default {
       }
 
       try {
-        const data = this.priceData.cex.map((d, i) => ({
-          time: d.t,
-          cexVolume: d.v || 0,
-          dexVolume: this.priceData.dex[i]?.v || 0
-        }))
+        // 优化大数据集的处理：只处理前10000个点以提高性能
+        const maxPoints = Math.min(10000, Math.min(this.priceData.cex.length, this.priceData.dex.length))
+        const data = []
+
+        for (let i = 0; i < maxPoints; i++) {
+          data.push({
+            time: this.priceData.cex[i].t,
+            cexVolume: this.priceData.cex[i].v || 0,
+            dexVolume: this.priceData.dex[i]?.v || 0
+          })
+        }
 
         const timeData = data.map(d => d.time)
         const cexVolumes = data.map(d => d.cexVolume)
@@ -871,7 +867,8 @@ export default {
       }
 
       try {
-        const spreads = this.spreadData.map(d => d.spread)
+        // 限制为前5000个点以提高性能
+        const spreads = this.spreadData.slice(0, 5000).map(d => d.spread)
         const bins = this.calculateHistogram(spreads, 20)
 
         return {
@@ -921,8 +918,9 @@ export default {
 
       try {
         // 创建散点图数据：CEX价格 vs DEX价格
+        // 限制为前2000个点以提高性能
         const scatterData = []
-        const len = Math.min(this.priceData.cex.length, this.priceData.dex.length)
+        const len = Math.min(2000, Math.min(this.priceData.cex.length, this.priceData.dex.length))
 
         for (let i = 0; i < len; i++) {
           const cexPrice = this.priceData.cex[i]?.p || 0
@@ -987,48 +985,37 @@ export default {
   },
 
   created() {
-    console.log('Overview component created, loading data...')
+    this.initializeCalendar()
     this.loadData()
   },
   
   methods: {
     ...mapActions(['loadPriceData', 'loadSpreadData', 'detectSignals', 'updateConfig']),
 
-    // 时间选择相关方法
-    selectTimePreset(preset) {
-      this.timePreset = preset
-
-      switch (preset) {
-        case 'full':
-          this.customRange = { start: '2025-09-01', end: '2025-09-30' }
-          break
-        case 'first-half':
-          this.customRange = { start: '2025-09-01', end: '2025-09-15' }
-          break
-        case 'second-half':
-          this.customRange = { start: '2025-09-16', end: '2025-09-30' }
-          break
-        case 'custom':
-          // 保持当前选择，不立即切换到日历
-          break
-      }
-
-      if (preset !== 'custom') {
-        this.loadData()
-      }
-    },
-
-    toggleCalendar() {
-      if (this.timePreset === 'custom') {
-        if (!this.showCalendar) {
-          this.initializeCalendar()
+    // 切换时间模式
+    switchTimeMode(mode) {
+      this.timeMode = mode
+      if (mode === 'single') {
+        // 切换到单天模式时，清理K线图配置和范围选择状态
+        this.dexCandlestickOptions = null
+        this.cexCandlestickOptions = null
+        // 清空范围选择状态（但不影响selectedDate）
+        this.rangeStartDate = null
+        this.rangeEndDate = null
+        // 刷新日历显示状态
+        this.updateCalendarSelection()
+        // 如果有选中的日期，立即加载
+        if (this.selectedDate) {
+          this.loadData()
         }
-        this.showCalendar = !this.showCalendar
+      } else {
+        // 切换到范围模式时，清空范围选择和K线图配置
+        this.rangeStartDate = null
+        this.rangeEndDate = null
+        this.dexCandlestickOptions = null
+        this.cexCandlestickOptions = null
+        this.updateCalendarSelection()
       }
-    },
-
-    hideCalendar() {
-      this.showCalendar = false
     },
 
     initializeCalendar() {
@@ -1046,21 +1033,25 @@ export default {
       const lastDay = new Date(year, month + 1, 0)
       const totalDays = lastDay.getDate()
 
+      // 获取今天的日期（用于标记今天）
+      const today = new Date()
+      const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month
+
       // 生成日历网格（6行 x 7列）
       for (let i = 0; i < 42; i++) {
         const dayNumber = i - firstDayOfWeek + 1
-        const isCurrentMonth = dayNumber >= 1 && dayNumber <= totalDays
+        const isCurrentMonthDay = dayNumber >= 1 && dayNumber <= totalDays
 
-        if (isCurrentMonth) {
+        if (isCurrentMonthDay) {
           const date = new Date(year, month, dayNumber)
-          const isSelected = this.selectedDates.some(d =>
-            d.getFullYear() === year && d.getMonth() === month && d.getDate() === dayNumber
-          )
+          const isToday = isCurrentMonth && dayNumber === today.getDate()
 
           this.calendarDays.push({
             date,
             enabled: true,
-            selected: isSelected,
+            index: i,
+            isToday: isToday,
+            selected: false,
             inRange: false,
             isStart: false,
             isEnd: false
@@ -1070,6 +1061,8 @@ export default {
           this.calendarDays.push({
             date: null,
             enabled: false,
+            index: i,
+            isToday: false,
             selected: false,
             inRange: false,
             isStart: false,
@@ -1081,29 +1074,36 @@ export default {
       this.updateCalendarSelection()
     },
 
-    selectDay(day) {
+    handleDayClick(day) {
       if (!day.enabled || !day.date) return
 
-      const date = day.date
-      const dateStr = date.toISOString().split('T')[0]
-
-      // 如果已经选择了这个日期，则取消选择
-      const existingIndex = this.selectedDates.findIndex(d =>
-        d.getTime() === date.getTime()
-      )
-
-      if (existingIndex >= 0) {
-        this.selectedDates.splice(existingIndex, 1)
+      if (this.timeMode === 'single') {
+        // 单天模式：点击立即加载
+        this.selectedDate = day.date
+        this.updateCalendarSelection()
+        this.loadData()
       } else {
-        // 如果还没有选择日期，或者已经选择了2个日期，则重新开始选择
-        if (this.selectedDates.length >= 2) {
-          this.selectedDates = [date]
+          // 范围模式：选择开始和结束日期
+          if (!this.rangeStartDate || (this.rangeStartDate && this.rangeEndDate)) {
+            // 开始新的范围选择
+            this.rangeStartDate = day.date
+            this.rangeEndDate = null
+            console.log('选择开始日期:', day.date)
         } else {
-          this.selectedDates.push(date)
-        }
-      }
-
+            // 选择结束日期
+            if (day.date < this.rangeStartDate) {
+              // 如果选择的日期早于开始日期，交换它们
+              this.rangeEndDate = this.rangeStartDate
+              this.rangeStartDate = day.date
+            } else {
+              this.rangeEndDate = day.date
+            }
+            console.log('选择结束日期:', day.date, '范围:', this.rangeStartDate, '到', this.rangeEndDate)
+          }
       this.updateCalendarSelection()
+          // 强制更新视图
+          this.$forceUpdate()
+        }
     },
 
     updateCalendarSelection() {
@@ -1111,116 +1111,88 @@ export default {
       this.calendarDays.forEach(day => {
         if (!day.date) return
 
-        const isSelected = this.selectedDates.some(d => d.getTime() === day.date.getTime())
-
-        if (this.selectedDates.length === 2) {
-          const sorted = [...this.selectedDates].sort((a, b) => a - b)
-          const inRange = day.date >= sorted[0] && day.date <= sorted[1]
-          const isStart = day.date.getTime() === sorted[0].getTime()
-          const isEnd = day.date.getTime() === sorted[1].getTime()
-
-          day.inRange = inRange
-          day.isStart = isStart
-          day.isEnd = isEnd
-          day.selected = isSelected
-        } else {
+        if (this.timeMode === 'single') {
+          // 单天模式
+          day.selected = this.selectedDate && day.date.getTime() === this.selectedDate.getTime()
           day.inRange = false
           day.isStart = false
           day.isEnd = false
-          day.selected = isSelected
+        } else {
+          // 范围模式
+          if (this.rangeStartDate && this.rangeEndDate) {
+            const sorted = [this.rangeStartDate, this.rangeEndDate].sort((a, b) => a - b)
+            const start = sorted[0]
+            const end = sorted[1]
+            day.inRange = day.date >= start && day.date <= end
+            day.isStart = day.date.getTime() === start.getTime()
+            day.isEnd = day.date.getTime() === end.getTime()
+            day.selected = day.isStart || day.isEnd
+          } else if (this.rangeStartDate) {
+            day.selected = day.date.getTime() === this.rangeStartDate.getTime()
+            day.inRange = false
+            day.isStart = day.selected
+            day.isEnd = false
+          } else {
+            day.selected = false
+          day.inRange = false
+          day.isStart = false
+          day.isEnd = false
+          }
         }
       })
     },
 
-    applyPreset(preset) {
-      const year = 2025
-      const month = 8 // 9月
-
-      switch (preset) {
-        case 'week1':
-          this.selectedDates = [
-            new Date(year, month, 1),
-            new Date(year, month, 7)
-          ]
-          break
-        case 'week2':
-          this.selectedDates = [
-            new Date(year, month, 8),
-            new Date(year, month, 14)
-          ]
-          break
-        case 'week3':
-          this.selectedDates = [
-            new Date(year, month, 15),
-            new Date(year, month, 21)
-          ]
-          break
-        case 'week4':
-          this.selectedDates = [
-            new Date(year, month, 22),
-            new Date(year, month, 28)
-          ]
-          break
-        case 'week5':
-          this.selectedDates = [
-            new Date(year, month, 29),
-            new Date(year, month, 30)
-          ]
-          break
+    confirmRangeSelection() {
+      console.log('确认范围选择', {
+        rangeStartDate: this.rangeStartDate,
+        rangeEndDate: this.rangeEndDate,
+        hasRangeSelection: this.hasRangeSelection
+      })
+      
+      if (this.rangeStartDate && this.rangeEndDate) {
+        console.log('开始加载数据...')
+        this.loadData()
+      } else {
+        console.warn('范围选择不完整，无法加载数据')
+        alert('请先选择开始和结束日期')
       }
-
-      this.updateCalendarSelection()
-    },
-
-    clearSelection() {
-      this.selectedDates = []
-      this.updateCalendarSelection()
-    },
-
-    confirmSelection() {
-      if (this.selectedDates.length === 0) return
-
-      const sorted = [...this.selectedDates].sort((a, b) => a - b)
-      this.customRange.start = sorted[0].toISOString().split('T')[0]
-      this.customRange.end = sorted[sorted.length - 1].toISOString().split('T')[0]
-
-      this.hideCalendar()
-      this.loadData()
     },
 
     async loadData() {
-      console.log('loadData called, timePreset:', this.timePreset)
       this.loading = true
       try {
-        // 根据选择的预设设置时间范围
-        let startDate, endDate
+        // 根据时间模式设置时间范围
+        let startTime, endTime
 
-        switch (this.timePreset) {
-          case 'full':
-            startDate = '2025-09-01'
-            endDate = '2025-09-30'
-            break
-          case 'first-half':
-            startDate = '2025-09-01'
-            endDate = '2025-09-15'
-            break
-          case 'second-half':
-            startDate = '2025-09-16'
-            endDate = '2025-09-30'
-            break
-          case 'custom':
-            startDate = this.customRange.start
-            endDate = this.customRange.end
-            break
-          default:
-            startDate = '2025-09-01'
-            endDate = '2025-09-30'
+        if (this.timeMode === 'single') {
+          // 单天模式：选择的那一天
+          if (!this.selectedDate) {
+            this.loading = false
+            return
+          }
+          const date = new Date(this.selectedDate)
+          date.setHours(0, 0, 0, 0)
+          startTime = date.getTime()
+          date.setHours(23, 59, 59, 999)
+          endTime = date.getTime()
+        } else {
+          // 范围模式：选择的日期范围
+          if (!this.rangeStartDate || !this.rangeEndDate) {
+            console.warn('范围模式：缺少开始或结束日期', {
+              rangeStartDate: this.rangeStartDate,
+              rangeEndDate: this.rangeEndDate
+            })
+            this.loading = false
+            return
+          }
+          const start = new Date(this.rangeStartDate)
+          start.setHours(0, 0, 0, 0)
+          startTime = start.getTime()
+          
+          const end = new Date(this.rangeEndDate)
+          end.setHours(23, 59, 59, 999)
+          endTime = end.getTime()
         }
-
-        const startTime = new Date(startDate).getTime()
-        const endTime = new Date(endDate).getTime()
-        
-        console.log('Time range:', new Date(startTime), 'to', new Date(endTime))
 
         await this.updateConfig({
           timeRange: {
@@ -1229,13 +1201,21 @@ export default {
           }
         })
 
-        console.log('Config updated, loading data...')
         await Promise.all([
           this.loadPriceData(),
           this.loadSpreadData(),
           this.detectSignals()
         ])
-        console.log('Data loaded successfully')
+        
+        // 如果是单天模式，加载K线图数据（按小时聚合）
+        if (this.timeMode === 'single') {
+          await this.loadCandlestickOptions(startTime, endTime)
+        } else {
+          // 范围模式：清空K线图配置
+          this.dexCandlestickOptions = null
+          this.cexCandlestickOptions = null
+        }
+        
         this.updateStats()
       } catch (error) {
         console.error('加载数据失败:', error)
@@ -1247,47 +1227,6 @@ export default {
     
     async startAnalysis() {
       await this.loadData()
-    },
-    
-    
-    onDexPoolChange() {
-      // 从选项中提取费率 "Uniswap V3 (0.3%)" -> 0.003
-      const match = this.dexPool.match(/\(([\d.]+)%\)/)
-      if (match) {
-        const feePercent = parseFloat(match[1])
-        const feeRate = feePercent / 100
-        console.log('Updating DEX fee to:', feeRate)
-        this.updateConfig({
-          detector: {
-            ...this.$store.state.config.detector,
-            fees: {
-              ...this.$store.state.config.detector.fees,
-              dex: feeRate
-            }
-          }
-        })
-      }
-      this.loadData()
-    },
-
-    onCexExchangeChange() {
-      // 从选项中提取费率 "Binance (0.1%)" -> 0.001
-      const match = this.cexExchange.match(/\(([\d.]+)%\)/)
-      if (match) {
-        const feePercent = parseFloat(match[1])
-        const feeRate = feePercent / 100
-        console.log('Updating CEX fee to:', feeRate)
-        this.updateConfig({
-          detector: {
-            ...this.$store.state.config.detector,
-            fees: {
-              ...this.$store.state.config.detector.fees,
-              cex: feeRate
-            }
-          }
-        })
-      }
-      this.loadData()
     },
 
     toggleLogScale() {
@@ -1409,6 +1348,337 @@ export default {
       })
 
       return histogram.map((count, i) => [min + i * binWidth, count])
+    },
+
+
+    /**
+     * 创建单个K线图配置（股票样式）
+     * @param {Array} data - K线数据 [[time, open, close, low, high], ...]
+     * @param {String} title - 图表标题
+     * @param {Function} axisLabelFormatter - X轴标签格式化函数
+     */
+    createSingleCandlestickOptions(data, title, axisLabelFormatter) {
+      if (!data || data.length === 0) {
+        return {
+          grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            top: '3%',
+            containLabel: true
+          },
+          xAxis: {
+            type: 'time',
+            scale: true,
+            boundaryGap: false
+          },
+          yAxis: {
+            type: 'value',
+            name: 'Price (USDT)'
+          },
+          series: []
+        }
+      }
+
+      return {
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          top: '3%',
+          containLabel: true
+        },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'cross' },
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          borderColor: '#e5e7eb',
+          borderWidth: 1,
+          textStyle: { color: '#111827' },
+          formatter: (params) => {
+            if (!params || params.length === 0) return ''
+            
+            const param = params[0]
+            if (param.seriesType === 'candlestick' && param.data && param.data.length >= 5) {
+              const date = new Date(param.data[0])
+              const timeStr = date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+              })
+              
+              const open = param.data[1]
+              const close = param.data[2]
+              const low = param.data[3]
+              const high = param.data[4]
+              const change = close - open
+              const changePct = ((change / open) * 100).toFixed(2)
+              
+              // 涨跌颜色
+              const changeColor = change >= 0 ? '#ef4444' : '#10b981'
+              const changeText = change >= 0 ? '↑' : '↓'
+              
+              let result = `<div style="font-weight: 600; margin-bottom: 8px;">${title}</div>`
+              result += `<div style="color: #6b7280; margin-bottom: 4px;">时间: ${timeStr}</div>`
+              result += `<div style="margin-top: 8px;">`
+              result += `<div>开盘: <span style="font-weight: 600;">${open.toFixed(2)}</span> USDT</div>`
+              result += `<div>收盘: <span style="font-weight: 600; color: ${changeColor};">${close.toFixed(2)}</span> USDT</div>`
+              result += `<div>最高: <span style="font-weight: 600;">${high.toFixed(2)}</span> USDT</div>`
+              result += `<div>最低: <span style="font-weight: 600;">${low.toFixed(2)}</span> USDT</div>`
+              result += `<div style="margin-top: 4px; color: ${changeColor}; font-weight: 600;">${changeText} ${Math.abs(change).toFixed(2)} (${changePct}%)</div>`
+              result += `</div>`
+              return result
+            }
+            return ''
+          }
+        },
+        xAxis: {
+          type: 'time',
+          scale: true,
+          boundaryGap: false,
+          axisLabel: {
+            color: '#6b7280',
+            formatter: axisLabelFormatter
+          },
+          axisLine: { lineStyle: { color: '#e5e7eb' } },
+          splitLine: { show: false }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'Price (USDT)',
+          nameTextStyle: { color: '#6b7280' },
+          axisLabel: {
+            color: '#6b7280',
+            formatter: (value) => value.toFixed(2)
+          },
+          splitLine: { 
+            lineStyle: { 
+              color: '#f3f4f6',
+              type: 'dashed'
+            } 
+          },
+          axisLine: { lineStyle: { color: '#e5e7eb' } }
+        },
+        series: [{
+          name: title,
+          type: 'candlestick',
+          data: data,
+          large: true,
+          largeThreshold: 100,
+          // 股票K线样式：涨红跌绿（中国习惯）
+          itemStyle: {
+            color: '#ef4444',      // 涨：红色（收盘 >= 开盘）
+            color0: '#10b981',      // 跌：绿色（收盘 < 开盘）
+            borderColor: '#ef4444', // 涨：红色边框
+            borderColor0: '#10b981', // 跌：绿色边框
+            borderWidth: 1
+          },
+          emphasis: {
+            itemStyle: {
+              borderWidth: 2,
+              shadowBlur: 10,
+              shadowColor: 'rgba(0, 0, 0, 0.3)'
+            }
+          }
+        }]
+      }
+    },
+
+    /**
+     * 加载K线图配置（单天模式）- 异步方法
+     * 生成两个独立的K线图配置（按小时聚合）
+     */
+    async loadCandlestickOptions(startTime, endTime) {
+      try {
+        console.log('开始加载K线图配置，时间范围:', {
+          start: new Date(startTime).toISOString(),
+          end: new Date(endTime).toISOString()
+        })
+        
+        // 单天模式：使用priceData按小时聚合生成K线数据
+        if (!this.priceData) {
+          this.dexCandlestickOptions = null
+          this.cexCandlestickOptions = null
+          return
+        }
+        
+        // 使用实时计算，按小时聚合
+        const candlestickData = this.generateCandlestickData()
+        console.log('生成的K线数据（按小时）:', {
+          dexCount: candlestickData.dex?.length || 0,
+          cexCount: candlestickData.cex?.length || 0,
+          dexFirst3: candlestickData.dex?.slice(0, 3),
+          cexFirst3: candlestickData.cex?.slice(0, 3)
+        })
+
+        // 计算时间范围（用于X轴格式化）
+        const allCandles = [...(candlestickData.dex || []), ...(candlestickData.cex || [])]
+        if (allCandles.length === 0) {
+          this.dexCandlestickOptions = null
+          this.cexCandlestickOptions = null
+          return
+        }
+
+        // 单天模式：使用小时格式化器（HH:MM）
+        const axisLabelFormatter = (value) => {
+          const date = new Date(value)
+          return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+        }
+
+        // 为每个交易所创建独立的K线图配置
+        if (this.showDex && candlestickData.dex && candlestickData.dex.length > 0) {
+          this.dexCandlestickOptions = this.createSingleCandlestickOptions(
+            candlestickData.dex,
+            'Uniswap V3',
+            axisLabelFormatter
+          )
+        } else {
+          this.dexCandlestickOptions = null
+        }
+
+        if (this.showCex && candlestickData.cex && candlestickData.cex.length > 0) {
+          this.cexCandlestickOptions = this.createSingleCandlestickOptions(
+            candlestickData.cex,
+            'Binance',
+            axisLabelFormatter
+          )
+        } else {
+          this.cexCandlestickOptions = null
+        }
+
+        console.log('K线图配置已更新:', {
+          dexCount: candlestickData.dex?.length || 0,
+          cexCount: candlestickData.cex?.length || 0,
+          hasDexOptions: !!this.dexCandlestickOptions,
+          hasCexOptions: !!this.cexCandlestickOptions
+        })
+        
+        // 强制触发视图更新
+        this.$forceUpdate()
+      } catch (error) {
+        console.error('加载K线图配置失败:', error)
+        this.dexCandlestickOptions = null
+        this.cexCandlestickOptions = null
+      }
+    },
+
+    /**
+     * 获取K线图配置（范围模式）- 同步版本（返回基础配置）
+     */
+    getCandlestickOptionsSync() {
+      // 返回基础配置，数据通过异步加载
+      return {
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          top: '15%',
+          containLabel: true
+        },
+        legend: {
+          data: [
+            ...(this.showDex ? ['Uniswap V3'] : []),
+            ...(this.showCex ? ['Binance'] : [])
+          ].filter(name => {
+            // 在同步版本中，总是显示选中的legend，即使暂时没有数据
+            // 因为数据可能还在加载中
+            return true
+          }),
+          top: 10,
+          textStyle: { color: '#6b7280' }
+        },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'cross' },
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          borderColor: '#e5e7eb',
+          textStyle: { color: '#111827' }
+        },
+        xAxis: {
+          type: 'time',
+          axisLabel: {
+            color: '#6b7280'
+          },
+          axisLine: { lineStyle: { color: '#e5e7eb' } },
+          splitLine: { lineStyle: { color: '#f3f4f6', opacity: 0.5 } }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'Price (USDT)',
+          nameTextStyle: { color: '#6b7280' },
+          // 移除固定范围
+          axisLabel: {
+            color: '#6b7280',
+            formatter: (value) => value.toFixed(2)
+          },
+          splitLine: { lineStyle: { color: '#f3f4f6' } },
+          axisLine: { lineStyle: { color: '#e5e7eb' } }
+        },
+        series: []
+      }
+    },
+
+    /**
+     * 生成K线图数据
+     * 将原始数据按时间窗口聚合（1小时）
+     */
+    generateCandlestickData() {
+      if (!this.priceData) {
+        return { dex: [], cex: [] }
+      }
+
+      // 按1小时聚合数据
+      const interval = 60 * 60 * 1000 // 1小时（毫秒）
+
+      const dexCandles = this.aggregateToCandles(this.priceData.dex, interval)
+      const cexCandles = this.aggregateToCandles(this.priceData.cex, interval)
+
+      return {
+        dex: dexCandles,
+        cex: cexCandles
+      }
+    },
+
+    /**
+     * 将价格数据聚合为K线数据
+     * @param {Array} priceData - 价格数据 [{t: timestamp, p: price}, ...]
+     * @param {Number} interval - 时间间隔（毫秒）
+     * @returns {Array} K线数据 [[timestamp, [open, close, low, high]], ...]
+     */
+    aggregateToCandles(priceData, interval) {
+      if (!priceData || priceData.length === 0) return []
+
+      // 按时间窗口分组
+      const buckets = new Map()
+
+      priceData.forEach(point => {
+        const bucketTime = Math.floor(point.t / interval) * interval
+        if (!buckets.has(bucketTime)) {
+          buckets.set(bucketTime, [])
+        }
+        buckets.get(bucketTime).push(point.p)
+      })
+
+      // 转换为K线格式
+      const candles = []
+      buckets.forEach((prices, bucketTime) => {
+        if (prices.length === 0) return
+
+        const open = prices[0] // 开盘价：第一个价格
+        const close = prices[prices.length - 1] // 收盘价：最后一个价格
+        const high = Math.max(...prices) // 最高价
+        const low = Math.min(...prices) // 最低价
+
+        // ECharts K线格式：[时间, 开盘, 收盘, 最低, 最高]
+        candles.push([bucketTime, open, close, low, high])
+      })
+
+      // 按时间排序
+      candles.sort((a, b) => a[0] - b[0])
+
+      return candles
     }
   }
 }
@@ -1659,18 +1929,21 @@ export default {
 }
 
 // 时间选择相关样式
-.time-quick-select {
+.time-mode-select {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  background: $bg-secondary;
+  padding: 4px;
+  border-radius: 8px;
 }
 
-.btn-time-preset {
-  padding: 8px 16px;
+.btn-mode {
+  flex: 1;
+  padding: 8px 12px;
   font-size: 13px;
   font-weight: 500;
-  border: 1px solid $border-color;
+  border: none;
   border-radius: 6px;
   background: transparent;
   color: $text-secondary;
@@ -1678,253 +1951,141 @@ export default {
   transition: all $transition-fast;
 
   &:hover {
-    border-color: $color-primary;
     color: $color-primary;
   }
 
   &.active {
-    background: $color-primary;
-    color: white;
-    border-color: $color-primary;
-  }
-}
-
-.btn-calendar-toggle {
-  margin-left: 8px;
-  padding: 6px 10px;
-  font-size: 14px;
-  background: transparent;
-  border: 1px solid $border-color;
-  border-radius: 4px;
-  color: $text-secondary;
-  cursor: pointer;
-  transition: all $transition-fast;
-
-  &:hover:not(:disabled) {
-    border-color: $color-primary;
+    background: white;
     color: $color-primary;
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 }
 
-// 日历组件样式
-.calendar-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-}
-
-.calendar-popup {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
-  width: 320px;
-  max-width: 90vw;
-  overflow: hidden;
-  animation: calendarSlideIn 0.2s ease;
-}
-
-.calendar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid #e5e7eb;
-
-  h4 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: #111827;
-  }
-
-  .btn-close {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    color: #6b7280;
-    font-size: 18px;
-    cursor: pointer;
-    transition: all 0.2s;
-
-    &:hover {
-      border-color: #ef4444;
-      color: #ef4444;
-    }
-  }
-}
-
-.calendar-body {
-  padding: 20px 24px;
-}
-
-.calendar-grid {
+// 嵌入的日历样式
+.embedded-calendar {
   margin-bottom: 16px;
+  padding: 12px;
+  background: $bg-secondary;
+  border-radius: 8px;
+}
+
+.calendar-month-header {
+  text-align: center;
+  margin-bottom: 12px;
+  
+  .month-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: $text-primary;
+  }
 }
 
 .calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
+  gap: 4px;
   margin-bottom: 8px;
 }
 
 .weekday {
-  padding: 8px 4px;
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: #6b7280;
+  color: $text-tertiary;
+  padding: 4px 0;
 }
 
-.calendar-days {
+.calendar-days-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
+  gap: 4px;
 }
 
-.calendar-day {
+.calendar-day-cell {
   aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
-  color: #111827;
+  color: $text-primary;
   cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.2s;
+  border-radius: 4px;
+  transition: all $transition-fast;
   position: relative;
+  min-height: 32px;
 
   &:hover:not(.disabled) {
-    background: #f3f4f6;
+    background: rgba(59, 130, 246, 0.1);
   }
 
   &.disabled {
-    color: #d1d5db;
-    cursor: not-allowed;
+    color: transparent;
+    cursor: default;
   }
 
   &.selected {
-    background: #3b82f6;
+    background: $color-primary;
     color: white;
+    font-weight: 600;
   }
 
   &.in-range {
-    background: #dbeafe;
-    color: #1e40af;
+    background: rgba(59, 130, 246, 0.15);
+    color: $text-primary;
   }
 
-  &.range-start,
-  &.range-end {
-    background: #1d4ed8;
+  &.range-start {
+    background: $color-primary;
     color: white;
+    font-weight: 600;
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
   }
 
-  &.range-start::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 4px;
-    height: 60%;
-    background: white;
-    border-radius: 2px;
+  &.range-end {
+    background: $color-primary;
+    color: white;
+    font-weight: 600;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
   }
 
-  &.range-end::after {
-    content: '';
-    position: absolute;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 4px;
-    height: 60%;
-    background: white;
-    border-radius: 2px;
+  &.today {
+    border: 2px solid $color-primary;
+  }
+
+  &.today:not(.selected) {
+    background: rgba(59, 130, 246, 0.05);
   }
 }
 
-.calendar-presets {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-  margin-bottom: 20px;
-}
-
-.btn-preset {
-  padding: 8px 6px;
+.btn-confirm-range {
+  margin-left: 8px;
+  padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
-  border: 1px solid #d1d5db;
+  background: $color-primary;
+  border: none;
   border-radius: 4px;
-  background: white;
-  color: #374151;
+  color: white;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all $transition-fast;
 
-  &:hover {
-    border-color: #3b82f6;
-    color: #3b82f6;
+  &:hover:not(:disabled) {
+    background: darken($color-primary, 10%);
   }
 
-  &:active {
-    background: #3b82f6;
-    color: white;
+  &:active:not(:disabled) {
+    transform: scale(0.98);
   }
-}
 
-.calendar-footer {
-  padding: 16px 24px;
-  border-top: 1px solid #e5e7eb;
-  background: #f9fafb;
-}
-
-.selected-range {
-  margin-bottom: 12px;
-
-  span {
-    font-size: 14px;
-    color: #374151;
-    font-weight: 500;
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 }
 
-.calendar-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-@keyframes calendarSlideIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95) translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
 
 @keyframes fadeIn {
   from {
@@ -1937,4 +2098,5 @@ export default {
   }
 }
 </style>
+
 

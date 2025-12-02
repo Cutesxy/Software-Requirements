@@ -54,7 +54,7 @@
         <!-- 核心功能 -->
         <section id="features" class="doc-section">
           <h2>✨ 核心功能</h2>
-          
+
           <div class="features-grid">
             <div class="feature-card">
               <div class="feature-icon">📊</div>
@@ -175,7 +175,7 @@
         <!-- 使用指南 -->
         <section id="usage" class="doc-section">
           <h2>🚀 使用指南</h2>
-          
+
           <div class="usage-steps">
             <div class="step-card">
               <div class="step-number">1</div>
@@ -222,7 +222,7 @@
         <!-- 技术栈 -->
         <section id="tech" class="doc-section">
           <h2>🛠️ 技术栈</h2>
-          
+
           <div class="tech-stack">
             <div class="tech-category">
               <h4>前端框架</h4>
@@ -797,4 +797,5 @@ export default {
     transform: translateY(-10px);
   }
 }
+</style>
 </style>

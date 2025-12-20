@@ -1,24 +1,12 @@
-# Backend API for Uniswap V3 vs Binance USDT/ETH Analysis
-
-概览:
-- get_data.py  : 获取数据主函数，负责从 The Graph (Uniswap V3) 与 Binance 拉取数据
-- dbMapper.py    : DBMapper 类，负责 MySQL 连接、表结构与增删查改
-- analysis.py : Analyzer 类，实现非原子套利事件识别与收益估算
-- api.py         : Flask REST API（JSON），前端使用 JS 调用这些接口
-- config.py      : 配置文件
-- test_db.py     :数据库连接测试文件(AI生成的，有问题自己麻烦改一下)
-- requirements.txt: Python 依赖
-
-快速启动:
-1. 修改 config.py 中 MYSQL_URI 与 POOL_ADDRESS。
-2. 安装依赖: pip install -r requirements.txt
-3. 运行：python get_data.py
-4. 运行: python api.py
-5. API:
-   - GET  /app/getdata      -> 返回数据库中交易
-   - GET  /app/getresult    -> 返回分析结果
-
-后端还需要完成的部分：
-- get_data.py
-- analysis.py
-- api.py
+## 当前已完成
+* get_price_data(start_ts, end_ts, interval=15) 获取 CEX 和 DEX 的价格数据
+* get_spread_data(start_ts, end_ts, interval=15)    获取价差数据
+* run_backtest(start_ts, end_ts, z_threshold, trade_size_usdt)     执行回测
+## 待完成
+* get_correlation_data(start_ts, end_ts) 返回相关性数据
+* get_heatmap_data(start_ts, end_ts) 返回热力图数据
+  
+## 注
+* 所有时间（start_ts, end_ts）为时间戳（timestamp）
+* 已实现函数部分返回值可能存在问题（逻辑存在错误，暂时不清楚具体实现思路），但会正常输出不会出现编译错误
+* main函数仅用于测试函数是否正常运行，最终项目中可删除

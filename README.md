@@ -1,15 +1,34 @@
-# 软件需求课程仓库 
+# README
 
-> [!NOTE]
->
-> 强烈建议每个人在远程仓库建立一个功能分支和自己的本地分支对应
->
-> 然后可以共用一个dev分支合并代码，完整的再搞到main上
->
-> 否则会导致代码冲突
-> 
-> 然后可以共用一个dev分支
->
-> 功能分支命名建议: feature/xxx(功能) e.g 前端登陆功能(feature/front-login)
 
+
+仓库简要描述 -- 软件需求课程项目
+
+
+
+## 前端 -- fronted
+
+```bash
+cd front/fronted
+npm install
+npm run dev
+```
+
+
+
+## 后端 -- backend
+
+```bash
+cd backend
+# config.py可以自己配置端口(若本机端口冲突)
+# 注意安装依赖 ... 
+python api.py 
+```
+
+
+
+## TODO LIST
+
+- [ ] 前后端合并
+- [ ] 集成测试
 

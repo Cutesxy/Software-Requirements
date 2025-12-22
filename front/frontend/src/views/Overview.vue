@@ -568,15 +568,15 @@ export default {
       const avgPrice = this.signals.reduce((sum, s) => sum + (s.cexPrice + s.dexPrice)/2, 0) / this.signals.length
       const spreadScore = Math.min(10, (avgSpread / avgPrice) * 1000) // 假设1%价差(100bps)为满分
 
-      // 2. 平均套利: 平均净利润
-      const avgProfit = this.signals.reduce((sum, s) => sum + s.netProfit, 0) / this.signals.length
+      // 2. 平均套利: 平均毛利润
+      const avgProfit = this.signals.reduce((sum, s) => sum + s.grossProfit, 0) / this.signals.length
       const profitScore = Math.min(10, avgProfit / 10) // 假设平均100U利润为满分
 
       // 3. 交易频率: 信号数量 / 天数 (假设30天)
       const frequencyScore = Math.min(10, this.signals.length / 30 / 2) // 假设每天20个信号为满分
 
-      // 4. 潜在利润: 总净利润 (对数刻度)
-      const totalProfit = this.signals.reduce((sum, s) => sum + s.netProfit, 0)
+      // 4. 潜在利润: 总毛利润 (对数刻度)
+      const totalProfit = this.signals.reduce((sum, s) => sum + s.grossProfit, 0)
       const totalProfitScore = Math.min(10, Math.log10(totalProfit > 0 ? totalProfit : 1) * 1.5)
 
       // 5. 市场波动: 暂时用价差标准差代替

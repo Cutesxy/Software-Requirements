@@ -47,9 +47,10 @@ class Analyzer:
             print('uniswap_swaps 表为空')
             return
 
-        print('uniswap_swaps load finished\n')
+        print(f'uniswap_swaps load finished')
 
         uniswap_swaps_i = 0
+        total_swap = 0
         # 读取 merged_trading_data 并删除 uniswap_swaps_count 为 0 的行（内存中过滤）
         merged_data = self.db.get_merged_trading_data()
 
@@ -81,11 +82,22 @@ class Analyzer:
             swap_count = int(getattr(row, 'uniswap_swap_count', 0))  # 用实际列名
             if swap_count == 0:
                 continue  # 跳过无 swap 的行
-            price_diff = float(getattr(row, 'price_difference', 0.0))
             # if price_diff <= 0:
             #    uniswap_swaps_i += swap_count
             #    continue  # 仅处理价格差为正的情况
             uniswap_swap_volume = float(getattr(row, 'uniswap_total_volume_eth', 0.0))
+            binance_swap_volume = float(getattr(row, 'uniswap_total_volume_usdt', 0.0))
+            binance_total_volume = float(getattr(row, 'binance_quote_volume', 0.0))
+            slippage = binance_swap_volume / (binance_total_volume * 10)
+            uniswap_price = float(getattr(row, 'uniswap_avg_price', 0.0))
+            binance_price = float(getattr(row, 'binance_close', 0.0))
+            if(uniswap_price > binance_price):
+                price_diff = uniswap_price - (1 + slippage) * binance_price
+            else:
+                price_diff = binance_price - (1 + slippage) * uniswap_price
+            if price_diff <= 0:
+                uniswap_swaps_i +=swap_count
+                continue
             gross_profit = abs(price_diff) * uniswap_swap_volume  # 估算毛利润
             binance_fee_total = 0.0  # 累计Binance的现货交易手续费
             uniswap_fee_total = 0.0  # 累计Uniswap V3的交易手续费
@@ -115,7 +127,7 @@ class Analyzer:
                 signal = dbMapper.Signal(
                     time_bucket=row.time_bucket,
                     timestamp=row.timestamp,
-                    direction='Long DEX' if price_diff > 0 else 'Short DEX',
+                    direction='CEX->DEX' if uniswap_price > binance_price else 'DEX->CEX',
                     size=row.binance_volume,
                     swap_count=row.uniswap_swap_count,
                     zscore=price_diff / row.uniswap_price_std if row.uniswap_price_std != 0 else None,
@@ -130,6 +142,8 @@ class Analyzer:
                     price_difference=price_diff
                 )
                 self.db.store_signal(signal.to_dict())
+                total_swap += 1
+        print(f"oppotunity count: {total_swap}")
 
     def export_analysis_data(self, output_format='csv', filename='merged_trading_data'):
         """
@@ -170,6 +184,87 @@ class Analyzer:
         except Exception as e:
             print(f"导出合并数据时出错: {e}")
             return False
+    def new_detect_events_from_df(self): 
+                # 从 self.db 读取 uniswap_swaps 表到 DataFrame（兼容常见 db_store 类型）
+        uniswap_swaps = self.db.get_uniswap_swaps()
+
+        if uniswap_swaps is None:
+            print('无法从 self.db 读取 uniswap_swaps 表，未知的 db_store 类型')
+            return
+
+        # dbMapper 当前实现返回 list of dicts，兼容 list 和 DataFrame
+        if isinstance(uniswap_swaps, list):
+            if len(uniswap_swaps) == 0:
+                print('uniswap_swaps 表为空')
+                return
+            try:
+                uniswap_swaps = pd.DataFrame(uniswap_swaps)
+            except Exception as e:
+                print(f'转换为 DataFrame 失败: {e}')
+                return
+
+        if not isinstance(uniswap_swaps, pd.DataFrame):
+            try:
+                uniswap_swaps = pd.DataFrame(uniswap_swaps)
+            except Exception as e:
+                print(f'无法将数据转换为 DataFrame: {e}')
+                return
+
+        if uniswap_swaps.empty:
+            print('uniswap_swaps 表为空')
+            return
+
+        print('uniswap_swaps load finished\n')
+
+        binance_klines = self.db.get_binance_klines()
+
+        if binance_klines is None:
+            print('无法从 self.db 读取 binance_klines 表，未知的 db_store 类型')
+            return
+
+        if isinstance(binance_klines, list):
+            if len(binance_klines) == 0:
+                print('binance_klines 表为空')
+                return
+            try:
+                binance_klines = pd.DataFrame(binance_klines)
+            except Exception as e:
+                print(f'转换为 DataFrame 失败: {e}')
+                return
+
+        if not isinstance(binance_klines, pd.DataFrame):
+            try:
+                binance_klines = pd.DataFrame(binance_klines)
+            except Exception as e:
+                print(f'无法将数据转换为 DataFrame: {e}')
+                return
+
+        if binance_klines.empty:
+            print('binance_klines 表为空')
+            return
+
+        print('binance_klines load finished\n')
+
+        for row in binance_klines.itertuples(index=True, name="Row"):
+            open_time_ms = int(getattr(row, 'open_time_ms', 0)) // 1000
+            if open_time_ms is None:
+                continue
+
+            start_time = open_time_ms
+            end_time = open_time_ms + 60
+
+            swaps_in_bucket = uniswap_swaps[
+                (uniswap_swaps['timestamp'] >= start_time) &
+                (uniswap_swaps['timestamp'] < end_time)
+            ]
+
+            swap_count = len(swaps_in_bucket)
+            if swap_count == 0:
+                continue
+
+            # 这里可以添加更多的分析逻辑，例如计算利润等
+
+            print(f"Time Bucket: {open_time_ms}, Swap Count: {swap_count}")
 
     def run_analysis(self):
         self.detect_events_from_df()

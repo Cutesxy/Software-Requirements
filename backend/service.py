@@ -1,7 +1,7 @@
-import time
 import random
-import config 
+import base
 import pandas as pd
+import numpy as np
 from sqlalchemy import create_engine
 
 # ==========================================
@@ -9,6 +9,11 @@ from sqlalchemy import create_engine
 # 1. 请在此文件中实现从数据库/CSV 读取数据的逻辑
 # 2. 可以使用 config.MYSQL_URI 连接数据库
 # ==========================================
+
+    #query = "SELECT * FROM uniswap_swaps ORDER BY ts"
+    #engine = create_engine(config.MYSQL_URI, pool_recycle=3600)
+    #df = pd.read_sql(query, engine.raw_connection())
+    #csv = pd.read_csv("arbitrage_signals.csv")
 
 def get_price_data(start_ts, end_ts, interval=15):
     """
@@ -102,35 +107,52 @@ def get_spread_data(start_ts, end_ts, interval=15):
 
 
 def get_heatmap_data(start_ts, end_ts):
-    signal_csv = pd.read_csv("arbitrage_signals.csv")
-    signals_records = signal_csv.to_dict(orient='records')
+    csv = pd.read_csv("arbitrage_signals.csv")
+    records = csv.to_dict(orient='records')
+    step = 3600  # 1 小时
+    binance_level_step = 50  # 每 50 美金一个档位
+    start_ts = start_ts - (start_ts % step)  # 对齐到 step
 
     mock_data = []
-    for item in signals_records:
-        timestamp = int(item.get('timestamp'))
-        if timestamp < start_ts:
-            continue
-        if timestamp > end_ts:
-            break
-        mock_data.append([random.randint(0, 20), random.randint(0, 20), round(random.random()*5, 2)])
+    # 按时间区间遍历，避免重用函数参数名
+    for interval_start in range(start_ts, end_ts, step):
+        interval_end = interval_start + step
+        records_in_interval = [item for item in records if interval_start <= int(item.get('timestamp', 0)) <= interval_end]
+
+        # 使用字典按 price level 聚合 z-score
+        buckets = {}  # level -> {'count': int, 'sum_z': float}
+        for item in records_in_interval:
+            binance_close = item.get('binance_close_price') or item.get('binance_close') or 0
+            binance_level = int(binance_close) // binance_level_step
+            z_score = float(item.get('zscore') or item.get('z_score') or 0.0)
+            if not np.isfinite(z_score):
+                z_score = 0.0
+
+            if binance_level not in buckets:
+                buckets[binance_level] = {'count': 0, 'sum_z': 0.0}
+            buckets[binance_level]['count'] += 1
+            buckets[binance_level]['sum_z'] += z_score
+
+        # 计算每个档位的平均 z-score 并输出到结果
+        for level, v in buckets.items():
+            avg_z = v['sum_z'] / v['count'] if v['count'] > 0 else 0.0
+            mock_data.append([interval_start, level * binance_level_step, round(avg_z, 2)])
+
     return mock_data
 
 def get_correlation_data(start_ts, end_ts):
-    signal_csv = pd.read_csv("arbitrage_signals.csv")
-    signals_records = signal_csv.to_dict(orient='records')
-    
-    mock_data = []
-    for item in signals_records:
-        ts = int(item.get('timestamp'))
-        if ts < start_ts:
+    csv = pd.read_csv("merged_trading_data.csv")
+    records = csv.to_dict(orient='records')
+    records_in_interval = [item for item in records if start_ts <= int(item.get('timestamp')) <= end_ts]
+    data1 = []
+    data2 = []
+    for item in records_in_interval:
+        if(item.get('uniswap_swap_count') == 0):
             continue
-        if ts > end_ts:
-            break
-        mock_data.append({
-            "lag": random.randint(0, 10),
-            "correlation": round(0.9 - random.random()*0.1, 3)
-        })
-    return mock_data
+        data1.append(item.get('uniswap_total_volume_eth'))
+        data2.append(item.get('uniswap_total_volume_usdt'))
+    correlation_matrix = np.corrcoef(data1, data2)
+    return correlation_matrix[0, 1]
 
 def run_backtest(start_ts, end_ts, z_threshold, trade_size_usdt):
     """
@@ -205,24 +227,26 @@ def run_backtest(start_ts, end_ts, z_threshold, trade_size_usdt):
 
 ### 测试代码 ###
 def main():
-    start_ts = 1756684931
-    end_ts =  1756700000
+    start_ts = 1756695900
+    end_ts =  1756900000
     interval = 15
 
-    price_data = get_price_data(start_ts, end_ts, interval)
-    spread_data_df = get_spread_data(start_ts, end_ts, interval)
-    heatmap_data = get_heatmap_data(start_ts, end_ts)
-    correlation_data = get_correlation_data(start_ts, end_ts)
-    backtest_signals, backtest_stats = run_backtest(start_ts, end_ts, z_threshold=2.0, trade_size_usdt=100)
+    #price_data = get_price_data(start_ts, end_ts, interval)
+    #print("cex_df:", price_data["cex"])
+    #print("dex_df:", price_data["dex"])   
 
-    print("cex_df:", price_data["cex"])
-    print("dex_df:", price_data["dex"])
-    print("spread_data_df:", spread_data_df)
+    #spread_data_df = get_spread_data(start_ts, end_ts, interval)
+    #print("spread_data_df:", spread_data_df) 
+
+    heatmap_data = get_heatmap_data(start_ts, end_ts)
     print("heatmap_data:", heatmap_data)
-    print("correlation_data:", correlation_data)
-    print("backtest_signals:", backtest_signals)
-    print("backtest_stats:", backtest_stats)
+
+    #correlation_data = get_correlation_data(start_ts, end_ts)
+    #print("correlation_data:", correlation_data)    
+
+    #backtest_signals, backtest_stats = run_backtest(start_ts, end_ts, z_threshold=2.0, trade_size_usdt=100)
+    #print("backtest_signals:", backtest_signals)
+    #print("backtest_stats:", backtest_stats)
 
 if __name__ == "__main__":
     main()
-    

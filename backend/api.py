@@ -3,6 +3,7 @@ from flask_cors import CORS
 from datetime import datetime
 import config
 import service
+import ai_service
 
 app = Flask(__name__)
 CORS(app)
@@ -103,6 +104,37 @@ def getresult():
     except Exception as e:
         print(f"API Error: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route("/app/ai/chat", methods=["POST"])
+def ai_chat():
+    """
+    AI 分析助手聊天接口
+    Body: { "message": "用户消息", "context": {页面上下文} }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "请求体不能为空"}), 400
+        
+        message = data.get("message", "")
+        context = data.get("context", {})
+        
+        if not message:
+            return jsonify({"error": "消息不能为空"}), 400
+        
+        print(f"AI Chat Request: page={context.get('page', 'unknown')}, message={message[:50]}...")
+        
+        # 调用 AI 服务
+        result = ai_service.chat_with_ai(message, context)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"AI Chat Error: {e}")
+        return jsonify({
+            "content": f"发生错误：{str(e)}",
+            "functionCall": None
+        }), 500
 
 def main():
     print(f"Starting Flask API on port {config.PORT}...")

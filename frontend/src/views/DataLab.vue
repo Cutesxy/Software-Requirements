@@ -26,6 +26,7 @@
             <li><a href="#architecture" @click.prevent="scrollTo('architecture')">🏗️ 系统架构</a></li>
             <li><a href="#usage" @click.prevent="scrollTo('usage')">🚀 使用指南</a></li>
             <li><a href="#tech" @click.prevent="scrollTo('tech')">🛠️ 技术栈</a></li>
+            <li><a href="#api" @click.prevent="scrollTo('api')">🔌 API 接口</a></li>
           </ul>
         </div>
       </aside>
@@ -37,15 +38,16 @@
           <h2>📖 系统概述</h2>
           <div class="content-card">
             <p>
-              本系统是一个专注于区块链非原子套利交易识别的综合分析平台。通过实时监控中心化交易所(CEX)和去中心化交易所(DEX)之间的价格差异，系统能够智能识别潜在的套利机会，并提供全方位的数据分析和可视化支持。
+              本系统是一个专注于区块链非原子套利交易识别的综合分析平台。通过监控中心化交易所(CEX)和去中心化交易所(DEX)之间的价格差异，系统能够智能识别潜在的套利机会，并提供全方位的数据分析、可视化和 AI 驱动的智能分析支持。
             </p>
             <div class="highlight-box">
               <h4>💡 核心价值</h4>
               <ul>
-                <li><strong>实时监控</strong>：毫秒级价格数据采集与分析</li>
-                <li><strong>智能识别</strong>：基于多维度指标的套利机会检测</li>
-                <li><strong>数据可视化</strong>：直观的图表展示与趋势分析</li>
-                <li><strong>风险评估</strong>：综合考虑交易成本与市场波动</li>
+                <li><strong>智能识别</strong>：基于价差阈值、Z-Score、成交量等多维度指标的套利机会检测</li>
+                <li><strong>数据可视化</strong>：丰富的交互式图表展示与趋势分析</li>
+                <li><strong>AI 分析助手</strong>：基于大语言模型的自然语言交互和智能数据筛选</li>
+                <li><strong>回测验证</strong>：历史数据回测，评估策略有效性和收益潜力</li>
+                <li><strong>灵活配置</strong>：支持预设方案和自定义参数，满足不同分析需求</li>
               </ul>
             </div>
           </div>
@@ -58,23 +60,26 @@
           <div class="features-grid">
             <div class="feature-card">
               <div class="feature-icon">📊</div>
-              <h3>实时数据监控</h3>
-              <p>多交易所价格数据实时采集与同步，支持自定义时间范围和交易对选择。</p>
+              <h3>数据分析中心</h3>
+              <p>全面的数据分析页面，支持多维度数据探索和 AI 智能总结。</p>
               <ul>
-                <li>CEX-DEX价格对比</li>
-                <li>成交量监控</li>
-                <li>延迟分析</li>
+                <li>价格对比与价差趋势</li>
+                <li>信号时间分布折线图</li>
+                <li>可配置价差分布（去极值、对数坐标）</li>
+                <li>信号明细表与钻取分析</li>
+                <li>AI 自动生成分析总结</li>
               </ul>
             </div>
 
             <div class="feature-card">
               <div class="feature-icon">🎯</div>
               <h3>套利机会识别</h3>
-              <p>基于价差阈值、Z-Score等多维度指标，智能识别并筛选优质套利机会。</p>
+              <p>基于价差阈值、Z-Score、成交量等多维度指标，智能识别并筛选优质套利机会。</p>
               <ul>
-                <li>价差分析</li>
-                <li>统计学检测</li>
-                <li>时间窗口分析</li>
+                <li>实时信号检测</li>
+                <li>预设方案（激进型/平衡型/保守型）</li>
+                <li>信号空间分布可视化</li>
+                <li>参数实时调整与响应</li>
               </ul>
             </div>
 
@@ -84,8 +89,9 @@
               <p>提供丰富的图表类型，全方位展示市场数据和分析结果。</p>
               <ul>
                 <li>折线图、柱状图</li>
-                <li>热力图、雷达图</li>
                 <li>散点图、饼图</li>
+                <li>交互式图表</li>
+                <li>图表联动与筛选</li>
               </ul>
             </div>
 
@@ -96,18 +102,30 @@
               <ul>
                 <li>历史数据回放</li>
                 <li>策略模拟</li>
-                <li>收益计算</li>
+                <li>收益计算与统计</li>
+                <li>权益曲线可视化</li>
               </ul>
             </div>
 
             <div class="feature-card">
-              <div class="feature-icon">📋</div>
-              <h3>数据分析报告</h3>
-              <p>自动生成详细的数据分析报告，支持导出和分享。</p>
+              <div class="feature-icon">🤖</div>
+              <h3>AI 分析助手</h3>
+              <p>基于大语言模型的智能分析助手，支持自然语言交互和信号筛选。</p>
               <ul>
-                <li>基本统计信息</li>
-                <li>套利机会分析</li>
-                <li>风险评估</li>
+                <li>自然语言信号筛选</li>
+                <li>智能数据查询</li>
+                <li>结构化数据输出</li>
+              </ul>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon">📊</div>
+              <h3>高级数据分析</h3>
+              <p>多维度数据分析，包含 AI 总结、信号明细表和可配置的可视化。</p>
+              <ul>
+                <li>AI 自动总结</li>
+                <li>信号明细表与钻取</li>
+                <li>可配置价差分布</li>
               </ul>
             </div>
 
@@ -118,7 +136,7 @@
               <ul>
                 <li>检测器参数调整</li>
                 <li>时间范围设置</li>
-                <li>交易对选择</li>
+                <li>预设方案快速切换</li>
               </ul>
             </div>
           </div>
@@ -146,6 +164,7 @@
                   <span class="arch-component">数据分析引擎</span>
                   <span class="arch-component">套利检测器</span>
                   <span class="arch-component">回测系统</span>
+                  <span class="arch-component">AI 服务 (DeepSeek)</span>
                 </div>
               </div>
 
@@ -154,6 +173,7 @@
               <div class="arch-layer">
                 <div class="layer-title">数据层</div>
                 <div class="layer-content">
+                  <span class="arch-component">CSV 数据文件</span>
                   <span class="arch-component">价格数据源</span>
                   <span class="arch-component">交易数据</span>
                   <span class="arch-component">历史记录</span>
@@ -205,7 +225,7 @@
               <div class="step-number">4</div>
               <div class="step-content">
                 <h4>数据分析</h4>
-                <p>在"数据分析"页面查看详细的统计报告、质量评估和多维度图表。</p>
+                <p>在"数据分析"页面查看详细的统计报告、AI 自动总结、信号明细表和可配置的可视化图表。点击"生成 AI 总结"获取智能分析建议。</p>
               </div>
             </div>
 
@@ -213,7 +233,15 @@
               <div class="step-number">5</div>
               <div class="step-content">
                 <h4>回测验证</h4>
-                <p>使用历史数据进行策略回测，评估收益潜力和风险水平。</p>
+                <p>使用历史数据进行策略回测，评估收益潜力和风险水平。查看回测统计、权益曲线和交易明细。</p>
+              </div>
+            </div>
+
+            <div class="step-card">
+              <div class="step-number">6</div>
+              <div class="step-content">
+                <h4>AI 助手交互</h4>
+                <p>使用右下角的 AI 分析助手，通过自然语言查询和筛选信号。例如："把净利润>10、Z>2.5、只看 DEX→CEX 的信号筛出来"。</p>
               </div>
             </div>
           </div>
@@ -234,10 +262,29 @@
             </div>
 
             <div class="tech-category">
+              <h4>后端框架</h4>
+              <div class="tech-tags">
+                <span class="tech-tag">Flask</span>
+                <span class="tech-tag">Flask-CORS</span>
+                <span class="tech-tag">Pandas</span>
+              </div>
+            </div>
+
+            <div class="tech-category">
               <h4>数据可视化</h4>
               <div class="tech-tags">
                 <span class="tech-tag">ECharts 5.4</span>
                 <span class="tech-tag">自定义图表</span>
+                <span class="tech-tag">交互式图表</span>
+              </div>
+            </div>
+
+            <div class="tech-category">
+              <h4>AI 服务</h4>
+              <div class="tech-tags">
+                <span class="tech-tag">DeepSeek API</span>
+                <span class="tech-tag">Function Calling</span>
+                <span class="tech-tag">自然语言处理</span>
               </div>
             </div>
 
@@ -261,27 +308,72 @@
           </div>
         </section>
 
-        <!-- 联系支持 -->
-        <section class="doc-section">
-          <div class="support-card">
-            <h3>📮 需要帮助？</h3>
-            <p>如果您在使用过程中遇到问题或有任何建议，欢迎通过以下方式联系我们：</p>
-            <div class="support-links">
-              <a href="mailto:support@example.com" class="support-link">
-                <span>📧</span>
-                <span>Email 支持</span>
-              </a>
-              <a href="#" class="support-link">
-                <span>💬</span>
-                <span>在线客服</span>
-              </a>
-              <a href="#" class="support-link">
-                <span>📖</span>
-                <span>API 文档</span>
-              </a>
+        <!-- API 接口 -->
+        <section id="api" class="doc-section">
+          <h2>🔌 API 接口</h2>
+          
+          <div class="api-docs">
+            <div class="api-endpoint">
+              <div class="endpoint-header">
+                <span class="method get">GET</span>
+                <code class="endpoint-path">/app/getdata</code>
+              </div>
+              <p class="endpoint-desc">获取图表可视化数据</p>
+              <div class="endpoint-params">
+                <strong>参数：</strong>
+                <ul>
+                  <li><code>type</code>: price | spread | heatmap | correlation</li>
+                  <li><code>start</code>: 开始时间戳（秒）</li>
+                  <li><code>end</code>: 结束时间戳（秒）</li>
+                  <li><code>interval</code>: 时间间隔（如 15m）</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="endpoint-header">
+                <span class="method get">GET</span>
+                <code class="endpoint-path">/app/getresult</code>
+              </div>
+              <p class="endpoint-desc">获取回测结果或信号数据</p>
+              <div class="endpoint-params">
+                <strong>参数：</strong>
+                <ul>
+                  <li><code>type</code>: backtest | signals</li>
+                  <li><code>start</code>: 开始时间戳（秒）</li>
+                  <li><code>end</code>: 结束时间戳（秒）</li>
+                  <li><code>zThreshold</code>: Z-Score 阈值（默认 2.0）</li>
+                  <li><code>tradeSize</code>: 交易规模 USDT（默认 10000）</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="endpoint-header">
+                <span class="method post">POST</span>
+                <code class="endpoint-path">/app/ai/chat</code>
+              </div>
+              <p class="endpoint-desc">AI 分析助手聊天接口</p>
+              <div class="endpoint-params">
+                <strong>请求体：</strong>
+                <pre class="code-block">{
+  "message": "用户消息",
+  "context": {
+    "page": "当前页面",
+    "params": { "参数对象" }
+  }
+}</pre>
+                <strong>响应：</strong>
+                <pre class="code-block">{
+  "content": "AI 回复内容",
+  "functionCall": { "函数调用结果（如有）" }
+}</pre>
+              </div>
             </div>
           </div>
         </section>
+
+        
       </main>
     </div>
   </div>
@@ -786,6 +878,110 @@ export default {
     font-size: 14px;
     font-weight: 500;
   }
+}
+
+// API 文档样式
+.api-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.api-endpoint {
+  background: $bg-primary;
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid $border-color;
+  transition: all $transition-fast;
+
+  &:hover {
+    box-shadow: $shadow-md;
+    border-color: $color-primary;
+  }
+}
+
+.endpoint-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.method {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+
+  &.get {
+    background: rgba($color-success, 0.1);
+    color: $color-success;
+  }
+
+  &.post {
+    background: rgba($color-primary, 0.1);
+    color: $color-primary;
+  }
+}
+
+.endpoint-path {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: $text-primary;
+  background: rgba($text-primary, 0.05);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.endpoint-desc {
+  color: $text-secondary;
+  margin: 0 0 16px 0;
+  font-size: 14px;
+}
+
+.endpoint-params {
+  strong {
+    color: $text-primary;
+    font-size: 14px;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  ul {
+    margin: 8px 0 0 0;
+    padding-left: 24px;
+
+    li {
+      font-size: 13px;
+      color: $text-secondary;
+      margin-bottom: 6px;
+      line-height: 1.6;
+
+      code {
+        background: rgba($color-primary, 0.1);
+        color: $color-primary;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+      }
+    }
+  }
+}
+
+.code-block {
+  background: rgba($text-primary, 0.05);
+  border: 1px solid $border-color;
+  border-radius: 6px;
+  padding: 16px;
+  margin: 12px 0;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: $text-primary;
+  overflow-x: auto;
+  line-height: 1.6;
+  white-space: pre;
 }
 
 // 动画

@@ -20,12 +20,20 @@
         <router-view />
       </transition>
     </main>
+
+    <!-- AI 助手 -->
+    <ai-assistant />
   </div>
 </template>
 
 <script>
+import AiAssistant from '@/components/AiAssistant.vue'
+
 export default {
-  name: 'MainLayout'
+  name: 'MainLayout',
+  components: {
+    AiAssistant
+  }
 }
 </script>
 

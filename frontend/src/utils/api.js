@@ -116,6 +116,39 @@ class ApiClient {
   async getBacktestStats(start, end, zThreshold = 2.0, tradeSize = 10000) {
     return this.getResult('backtest', start, end, zThreshold, tradeSize)
   }
+
+  /**
+   * POST 请求方法
+   */
+  async postRequest(endpoint, data = {}) {
+    try {
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      return result
+    } catch (error) {
+      console.error(`API Request Error [${endpoint}]:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * AI 聊天接口
+   * @param {Object} data - { message, context }
+   */
+  async chatWithAI(data) {
+    return this.postRequest('/app/ai/chat', data)
+  }
 }
 
 export default new ApiClient()

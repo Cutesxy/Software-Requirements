@@ -19,6 +19,7 @@
               step="0.1"
               min="0"
               class="input"
+              @input="onParamsChange"
               @change="onParamsChange"
             />
           </div>
@@ -34,6 +35,7 @@
               step="0.1"
               min="0"
               class="input"
+              @input="onParamsChange"
               @change="onParamsChange"
             />
           </div>
@@ -49,6 +51,7 @@
               step="100"
               min="0"
               class="input"
+              @input="onParamsChange"
               @change="onParamsChange"
             />
           </div>
@@ -135,7 +138,7 @@
           <div class="stats-panel">
             <div class="stat-item">
               <span class="stat-label">检测信号</span>
-              <span class="stat-value">{{ signals.length || 0 }}</span>
+              <span class="stat-value">{{ (signals && signals.length) || 0 }}</span>
             </div>
             <div class="stat-item">
               <span class="stat-label">总收益</span>
@@ -154,7 +157,7 @@
         <!-- 信号列表 -->
         <div class="card">
           <div class="card-header">
-            <h3>套利信号 ({{ signals.length || 0 }})</h3>
+            <h3>套利信号 ({{ (signals && signals.length) || 0 }})</h3>
             <div class="header-actions">
               <select v-model="sortBy" class="select select-sm">
                 <option value="time">按时间</option>
@@ -302,6 +305,7 @@ export default {
       selectedSignal: null,
       selectedPreset: '',
       sortBy: 'profit',
+      paramsChangeTimer: null,
       
       detectorParams: {
         priceThreshold: 0.8,
@@ -327,7 +331,9 @@ export default {
   },
   
   computed: {
-    ...mapState(['signals']),
+    ...mapState({
+      signals: state => state.signals || []
+    }),
     
     sortedSignals() {
       if (!this.signals || this.signals.length === 0) return []
@@ -359,12 +365,16 @@ export default {
     signalScatterOptions() {
       if (!this.signals || this.signals.length === 0) return {}
       
-      const data = this.signals.map(s => [
-        s.time, // X axis: Full timestamp
-        Math.abs(s.spread),
-        s.netProfit,
-        s.confidence
-      ])
+      const data = this.signals.map(s => {
+        // 确保时间戳格式正确（转换为毫秒）
+        const time = typeof s.time === 'number' ? (s.time < 1e12 ? s.time * 1000 : s.time) : new Date(s.time).getTime()
+        return [
+          time, // X axis: 时间戳（毫秒）
+          Math.abs(s.spread || 0), // Y axis: 价差
+          s.netProfit || 0, // 颜色映射：净利润
+          s.confidence || 0 // 大小映射：置信度
+        ]
+      })
       
       return {
         backgroundColor: 'transparent',
@@ -402,8 +412,8 @@ export default {
           splitLine: { lineStyle: { color: '#f3f4f6' } }
         },
         visualMap: {
-          min: 0,
-          max: Math.max(...data.map(d => d[2])),
+          min: data.length > 0 ? Math.min(...data.map(d => d[2])) : 0,
+          max: data.length > 0 ? Math.max(...data.map(d => d[2])) : 0,
           dimension: 2,
           orient: 'vertical',
           right: 10,
@@ -455,8 +465,29 @@ export default {
       }
     },
     
-    onParamsChange() {
-      this.updateDetectorParams(this.detectorParams)
+    async onParamsChange() {
+      // 防抖处理，避免频繁触发
+      if (this.paramsChangeTimer) {
+        clearTimeout(this.paramsChangeTimer)
+      }
+      
+      this.paramsChangeTimer = setTimeout(async () => {
+        console.log('onParamsChange called with params:', JSON.parse(JSON.stringify(this.detectorParams)))
+        // 更新 Vuex store 中的参数（使用深度克隆确保正确传递）
+        const paramsToUpdate = JSON.parse(JSON.stringify(this.detectorParams))
+        await this.updateDetectorParams(paramsToUpdate)
+        // 等待一下确保参数已更新到 store
+        await this.$nextTick()
+        // 验证 store 中的参数
+        const storeParams = this.$store.state.config.detector
+        console.log('Store params after update:', {
+          priceThreshold: storeParams.priceThreshold,
+          zScoreThreshold: storeParams.zScoreThreshold,
+          volumeMin: storeParams.volumeMin
+        })
+        // 自动触发信号检测，更新右侧图表
+        await this.detectSignals()
+      }, 300) // 300ms 防抖
     },
     
     resetParams() {
@@ -474,12 +505,12 @@ export default {
       this.onParamsChange()
     },
     
-    loadPreset() {
+    async loadPreset() {
       const presets = {
         conservative: {
-          priceThreshold: 1.0,
-          zScoreThreshold: 2.5,
-          volumeMin: 1500,
+          priceThreshold: 0.9,
+          zScoreThreshold: 10,
+          volumeMin: 1000,
           fees: { cex: 0.001, dex: 0.003, gas: 20, slippage: 0.003 }
         },
         balanced: {
@@ -502,7 +533,7 @@ export default {
           ...presets[this.selectedPreset]
         }
         // 预设加载后重新获取数据
-        this.onParamsChange()
+        await this.onParamsChange()
       }
     },
     

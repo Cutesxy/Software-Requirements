@@ -67,7 +67,20 @@ export default new Vuex.Store({
     },
     
     UPDATE_DETECTOR_PARAMS(state, params) {
-      state.config.detector = { ...state.config.detector, ...params }
+      // 深度合并，特别是处理嵌套的 fees 对象
+      const oldParams = { ...state.config.detector }
+      state.config.detector = {
+        ...state.config.detector,
+        ...params,
+        fees: {
+          ...state.config.detector.fees,
+          ...(params.fees || {})
+        }
+      }
+      console.log('Updated detector params:', {
+        old: { priceThreshold: oldParams.priceThreshold, zScoreThreshold: oldParams.zScoreThreshold, volumeMin: oldParams.volumeMin },
+        new: { priceThreshold: state.config.detector.priceThreshold, zScoreThreshold: state.config.detector.zScoreThreshold, volumeMin: state.config.detector.volumeMin }
+      })
     }
   },
   
@@ -157,14 +170,56 @@ export default new Vuex.Store({
         // 根据检测器参数过滤信号
         const { priceThreshold, zScoreThreshold, volumeMin } = state.config.detector
         
+        console.log('Filtering signals with params:', { priceThreshold, zScoreThreshold, volumeMin })
+        console.log(`Before filtering: ${signals.length} signals`)
+        
+        // 统计各条件的过滤情况
+        let priceFiltered = 0
+        let zScoreFiltered = 0
+        let volumeFiltered = 0
+        let totalFiltered = 0
+        
+        // 先统计所有信号的分布情况
+        const allSpreads = signals.map(s => Math.abs(s.spread || 0)).sort((a, b) => a - b)
+        const minSpread = allSpreads[0] || 0
+        const maxSpread = allSpreads[allSpreads.length - 1] || 0
+        const medianSpread = allSpreads[Math.floor(allSpreads.length / 2)] || 0
+        console.log(`Spread stats: min=${minSpread.toFixed(2)}, max=${maxSpread.toFixed(2)}, median=${medianSpread.toFixed(2)}`)
+        console.log(`Signals below priceThreshold ${priceThreshold}: ${allSpreads.filter(s => s < priceThreshold).length}`)
+        
         signals = signals.filter(s => {
-          return Math.abs(s.spread) >= priceThreshold &&
-                 Math.abs(s.zScore) >= zScoreThreshold &&
-                 s.size >= volumeMin
+          const spread = Math.abs(s.spread || 0)
+          const zScore = Math.abs(s.zScore || 0)
+          const volume = s.size || 0
+          
+          const passPrice = spread >= priceThreshold
+          const passZScore = zScore >= zScoreThreshold
+          const passVolume = volume >= volumeMin
+          
+          if (!passPrice) priceFiltered++
+          if (!passZScore) zScoreFiltered++
+          if (!passVolume) volumeFiltered++
+          
+          const pass = passPrice && passZScore && passVolume
+          if (!pass) totalFiltered++
+          
+          return pass
         })
 
-        console.log(`Loaded ${signals.length} real signals from CSV (filtered with dynamic params)`)
-        commit('SET_SIGNALS', signals)
+        console.log(`After filtering: ${signals.length} signals (filtered out: ${totalFiltered})`)
+        console.log(`Filtered by price: ${priceFiltered}, by zScore: ${zScoreFiltered}, by volume: ${volumeFiltered}`)
+        console.log(`Expected filtered by price: ${allSpreads.filter(s => s < priceThreshold).length} signals have spread < ${priceThreshold}`)
+        
+        // 采样检查前几个信号的 spread 值
+        if (signals.length > 0) {
+          const sampleSpreads = signals.slice(0, 5).map(s => Math.abs(s.spread || 0))
+          console.log('Sample spreads (after filter):', sampleSpreads)
+        } else {
+          console.log('No signals passed the filter!')
+        }
+        
+        // 强制创建新数组，确保 Vue 响应式更新
+        commit('SET_SIGNALS', [...signals])
         return signals
       } catch (error) {
         console.error('检测套利信号失败:', error)

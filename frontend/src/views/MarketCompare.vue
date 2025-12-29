@@ -99,7 +99,7 @@
           </button>
         </div>
         <div class="insight-content" v-if="insight">
-          <p v-for="(line, idx) in insight.split('\n')" :key="idx" v-html="formatInsightLine(line)"></p>
+          <p v-html="formatInsightLine(insight)"></p>
         </div>
         <div v-else class="insight-placeholder">
           点击刷新按钮生成 AI 分析总结
@@ -167,6 +167,23 @@
             :loading="loading"
           />
         </div>
+      </div>
+
+      <!-- 套利热力图 -->
+      <div class="chart-card full-width">
+        <div class="chart-header">
+          <h3>🔥 套利热力图 - 星期vs小时分布</h3>
+          <div class="heatmap-info">
+            <span v-if="bestWeekInfo">显示：{{ bestWeekInfo.label }}（套利机会最多）</span>
+            <span v-else>识别高频套利时段</span>
+          </div>
+        </div>
+        <chart-card
+          title=""
+          :height="500"
+          :options="heatmapOptions"
+          :loading="heatmapLoading"
+        />
       </div>
 
       <!-- 价格对比 -->
@@ -339,6 +356,10 @@ export default {
       // AI 结论
       insight: null,
       insightLoading: false,
+
+      // 热力图相关
+      heatmapData: null,
+      heatmapLoading: false,
 
       // 图表选项
       spreadOptions: {
@@ -718,6 +739,155 @@ export default {
       }
     },
 
+    // 热力图选项 - 星期vs小时分布（只显示套利机会最多的星期）
+    heatmapOptions() {
+      if (!this.bestWeekInfo || !this.bestWeekInfo.signals || this.bestWeekInfo.signals.length === 0) {
+        return {
+          title: {
+            text: '暂无热力图数据',
+            left: 'center',
+            top: 'middle',
+            textStyle: {
+              color: '#6b7280',
+              fontSize: 16
+            }
+          }
+        }
+      }
+
+      // 只使用最佳星期的信号数据
+      const bestWeekSignals = this.bestWeekInfo.signals
+      
+      // 按星期和小时分组
+      const weekHourData = {}
+      
+      bestWeekSignals.forEach(signal => {
+        const date = new Date(signal.time * 1000)
+        const dayOfWeek = date.getDay() // 0=周日, 1=周一, ..., 6=周六
+        const hour = date.getHours()
+        
+        const key = `${dayOfWeek}_${hour}`
+        if (!weekHourData[key]) {
+          weekHourData[key] = []
+        }
+        
+        // 使用Z-Score或价差作为强度值
+        const intensity = Math.abs(signal.zScore || signal.spread || 0)
+        weekHourData[key].push(intensity)
+      })
+
+      // 计算每个星期-小时组合的平均值
+      const heatmapData = []
+      
+      for (let day = 0; day < 7; day++) {
+        for (let hour = 0; hour < 24; hour++) {
+          const key = `${day}_${hour}`
+          const values = weekHourData[key] || []
+          const avgValue = values.length > 0
+            ? values.reduce((sum, val) => sum + val, 0) / values.length
+            : 0
+          
+          // ECharts热力图数据格式：[x轴索引, y轴索引, 值]
+          heatmapData.push([hour, day, avgValue])
+        }
+      }
+
+      const maxValue = Math.max(...heatmapData.map(item => item[2]), 1)
+
+      return {
+        tooltip: {
+          position: 'top',
+          formatter: (params) => {
+            if (!params.data) return ''
+            const [hour, day, value] = params.data
+            const weekDay = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][day]
+            return `${weekDay} ${hour}:00<br/>套利强度: ${value.toFixed(2)}`
+          },
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          borderColor: '#e5e7eb',
+          textStyle: { color: '#111827' }
+        },
+        grid: {
+          height: '70%',
+          top: '10%',
+          left: '10%',
+          right: '10%'
+        },
+        xAxis: {
+          type: 'category',
+          data: Array.from({ length: 24 }, (_, i) => `${i}:00`),
+          splitArea: {
+            show: true
+          },
+          axisLabel: {
+            color: '#6b7280',
+            fontSize: 11,
+            interval: 1
+          },
+          name: '小时',
+          nameLocation: 'middle',
+          nameGap: 30,
+          nameTextStyle: {
+            color: '#6b7280',
+            fontSize: 14
+          }
+        },
+        yAxis: {
+          type: 'category',
+          data: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'],
+          splitArea: {
+            show: true
+          },
+          axisLabel: {
+            color: '#6b7280',
+            fontSize: 12
+          },
+          name: '星期',
+          nameLocation: 'middle',
+          nameGap: 50,
+          nameTextStyle: {
+            color: '#6b7280',
+            fontSize: 14
+          }
+        },
+        visualMap: {
+          min: 0,
+          max: maxValue,
+          calculable: true,
+          orient: 'horizontal',
+          left: 'center',
+          bottom: '5%',
+          inRange: {
+            color: ['#e0f2fe', '#3b82f6', '#1e40af', '#7c3aed']
+          },
+          textStyle: {
+            color: '#6b7280'
+          },
+          text: ['高', '低']
+        },
+        series: [{
+          name: '套利强度',
+          type: 'heatmap',
+          data: heatmapData,
+          label: {
+            show: true,
+            formatter: (params) => {
+              const value = params.data[2]
+              return value > 0 ? value.toFixed(1) : ''
+            },
+            fontSize: 10,
+            color: '#111827'
+          },
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowColor: 'rgba(0, 0, 0, 0.5)'
+            }
+          }
+        }]
+      }
+    },
+
     // 价格对比图表
     priceCompareOptions() {
       if (!this.priceData || !this.priceData.cex || !this.priceData.dex) return {}
@@ -800,6 +970,65 @@ export default {
       }
       
       return filtered
+    },
+
+    // 找出套利机会最多的星期
+    bestWeekInfo() {
+      if (!this.signals || this.signals.length === 0) return null
+
+      // 按星期分组统计
+      const weekStats = {}
+      
+      this.signals.forEach(signal => {
+        const date = new Date(signal.time * 1000)
+        // 获取该日期所在周的起始日期（周一）
+        const weekStart = this.getWeekStart(date)
+        const weekKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`
+        
+        if (!weekStats[weekKey]) {
+          weekStats[weekKey] = {
+            weekStart: weekStart,
+            count: 0,
+            totalIntensity: 0,
+            signals: []
+          }
+        }
+        
+        const intensity = Math.abs(signal.zScore || signal.spread || 0)
+        weekStats[weekKey].count++
+        weekStats[weekKey].totalIntensity += intensity
+        weekStats[weekKey].signals.push(signal)
+      })
+
+      // 找出套利机会最多的星期（按信号数量，如果相同则按总强度）
+      let bestWeek = null
+      let maxScore = 0
+
+      Object.values(weekStats).forEach(week => {
+        // 综合评分：信号数量 * 1000 + 总强度
+        const score = week.count * 1000 + week.totalIntensity
+        if (score > maxScore) {
+          maxScore = score
+          bestWeek = week
+        }
+      })
+
+      if (!bestWeek) return null
+
+      // 格式化星期标签
+      const weekEnd = new Date(bestWeek.weekStart)
+      weekEnd.setDate(weekEnd.getDate() + 6)
+      
+      const startStr = `${bestWeek.weekStart.getMonth() + 1}/${bestWeek.weekStart.getDate()}`
+      const endStr = `${weekEnd.getMonth() + 1}/${weekEnd.getDate()}`
+      
+      return {
+        weekStart: bestWeek.weekStart,
+        weekEnd: weekEnd,
+        label: `${startStr} - ${endStr}`,
+        count: bestWeek.count,
+        signals: bestWeek.signals
+      }
     }
   },
 
@@ -832,6 +1061,9 @@ export default {
         this.signals = signals
         this.spreadData = spreadData
         this.priceData = priceData
+
+        // 加载热力图数据
+        this.loadHeatmapData()
 
         this.hasData = true
       } catch (error) {
@@ -913,10 +1145,10 @@ export default {
 
     // 格式化结论文本
     formatInsightLine(line) {
-      if (!line.trim()) return ''
+      if (!line) return ''
       return line
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\n/g, '<br>')
+        .replace(/\n/g, ' ')
     },
 
     // 参数变化时重新加载
@@ -943,6 +1175,14 @@ export default {
       return new Date(timeMs).toLocaleString('zh-CN')
     },
 
+    // 获取日期所在周的起始日期（周一）
+    getWeekStart(date) {
+      const d = new Date(date)
+      const day = d.getDay()
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1) // 如果周日，则往前6天到周一
+      return new Date(d.setDate(diff))
+    },
+
     // 表格行点击
     onRowClick(row) {
       this.selectedSignal = row
@@ -952,6 +1192,95 @@ export default {
     closeDetail() {
       this.selectedSignal = null
     },
+
+    // 加载热力图数据
+    async loadHeatmapData() {
+      this.heatmapLoading = true
+      try {
+        const start = this.dateToTimestamp(this.params.startDate)
+        const end = this.dateToTimestamp(this.params.endDate) + 86400 - 1
+        
+        // 调用后端API获取热力图数据
+        const rawHeatmapData = await apiClient.getHeatmapData(start, end)
+        
+        // 后端返回的格式应该是 [day, hour, value]，其中day是0-6（星期几）
+        if (rawHeatmapData && rawHeatmapData.length > 0) {
+          // 验证数据格式
+          if (Array.isArray(rawHeatmapData[0]) && rawHeatmapData[0].length === 3) {
+            // 检查是否是 [day, hour, value] 格式（day是0-6）
+            if (typeof rawHeatmapData[0][0] === 'number' && rawHeatmapData[0][0] < 7) {
+              // 直接使用后端返回的 [day, hour, value] 格式
+              this.heatmapData = rawHeatmapData
+            } else {
+              // 如果是时间戳格式，需要转换为星期格式
+              this.heatmapData = this.convertTimestampToWeekDay(rawHeatmapData)
+            }
+          } else {
+            // 格式不正确，从signals生成
+            this.heatmapData = this.generateHeatmapFromSignals()
+          }
+        } else {
+          // 如果没有数据，从signals生成
+          this.heatmapData = this.generateHeatmapFromSignals()
+        }
+      } catch (error) {
+        console.error('加载热力图数据失败:', error)
+        // 如果API失败，从signals生成
+        this.heatmapData = this.generateHeatmapFromSignals()
+      } finally {
+        this.heatmapLoading = false
+      }
+    },
+
+    // 将时间戳格式转换为星期格式
+    convertTimestampToWeekDay(timestampData) {
+      const weekDayData = []
+      timestampData.forEach(item => {
+        if (item.length >= 3) {
+          const date = new Date(item[0] * 1000)
+          const dayOfWeek = date.getDay() // 0=周日, 1=周一, ..., 6=周六
+          const hour = item[1]
+          const value = item[2]
+          weekDayData.push([dayOfWeek, hour, value])
+        }
+      })
+      return weekDayData
+    },
+
+    // 从信号数据生成热力图
+    generateHeatmapFromSignals() {
+      if (!this.signals || this.signals.length === 0) return []
+      
+      const heatmapData = []
+      
+      // 按星期和小时分组
+      const grouped = {}
+      this.signals.forEach(signal => {
+        const date = new Date(signal.time * 1000)
+        const dayOfWeek = date.getDay() // 0=周日, 1=周一, ..., 6=周六
+        const hour = date.getHours()
+        
+        const key = `${dayOfWeek}_${hour}`
+        if (!grouped[key]) {
+          grouped[key] = []
+        }
+        
+        // 使用Z-Score或价差作为强度值
+        const intensity = Math.abs(signal.zScore || signal.spread || 0)
+        grouped[key].push(intensity)
+      })
+      
+      // 转换为热力图数据格式 [dayOfWeek, hour, avgValue]
+      // dayOfWeek: 0=周日, 1=周一, ..., 6=周六
+      Object.entries(grouped).forEach(([key, values]) => {
+        const [dayOfWeek, hour] = key.split('_').map(Number)
+        const avgValue = values.reduce((sum, val) => sum + val, 0) / values.length
+        heatmapData.push([dayOfWeek, hour, avgValue])
+      })
+      
+      return heatmapData
+    },
+
 
     // 导出表格
     exportTable() {
@@ -1140,6 +1469,12 @@ export default {
     line-height: 1.6;
     font-size: 14px;
 
+    p {
+      margin: 0;
+      white-space: normal;
+      word-wrap: break-word;
+    }
+
     ::v-deep strong {
       color: $color-primary;
       font-weight: 600;
@@ -1167,6 +1502,12 @@ export default {
   @media (max-width: 1024px) {
     grid-template-columns: 1fr;
   }
+}
+
+.heatmap-info {
+  font-size: 14px;
+  color: $text-secondary;
+  font-weight: 500;
 }
 
 .chart-card {

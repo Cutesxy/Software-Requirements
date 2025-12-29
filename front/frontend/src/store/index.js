@@ -21,7 +21,6 @@ export default new Vuex.Store({
       detector: {
         priceThreshold: 0.8,
         zScoreThreshold: 2.0,
-        timeWindow: [1, 20],
         volumeMin: 1000,
         fees: {
           cex: 0.001,

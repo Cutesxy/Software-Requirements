@@ -98,31 +98,10 @@
             </label>
             <div class="checkbox-grid">
               <div class="checkbox-item">
-                <input type="checkbox" id="showRadar" v-model="showRadar" />
-                <label for="showRadar">
-                  雷达图
-                  <span class="chart-tooltip" title="雷达图展示套利机会的多个维度指标，包括价差幅度、交易频率、潜在利润等">ℹ️</span>
-                </label>
-              </div>
-              <div class="checkbox-item">
                 <input type="checkbox" id="showPie" v-model="showPie" />
                 <label for="showPie">
                   交易方向比例
                   <span class="chart-tooltip" title="饼图显示交易方向的比例分布，帮助分析套利机会的主要流向">ℹ️</span>
-                </label>
-              </div>
-              <div class="checkbox-item">
-                <input type="checkbox" id="showHeatmap" v-model="showHeatmap" />
-                <label for="showHeatmap">
-                  价差热力图
-                  <span class="chart-tooltip" title="热力图展示价差在不同时间段的分布情况，颜色深浅表示Z-Score强度">ℹ️</span>
-                </label>
-              </div>
-              <div class="checkbox-item">
-                <input type="checkbox" id="showVolumeChart" v-model="showVolumeChart" />
-                <label for="showVolumeChart">
-                  成交量对比
-                  <span class="chart-tooltip" title="柱状图对比不同交易所的成交量变化趋势">ℹ️</span>
                 </label>
               </div>
               <div class="checkbox-item">
@@ -259,21 +238,6 @@
         
         <!-- 下方图表组 -->
         <div class="charts-grid" style="margin-top: 24px;">
-          <!-- 雷达图 -->
-          <div v-if="showRadar" class="chart-item">
-            <div class="card">
-              <div class="card-header">
-                <h3>实时套利机会雷达图</h3>
-              </div>
-              <chart-card
-                title=""
-                :height="280"
-                :options="radarOptions"
-                :loading="loading"
-              />
-            </div>
-          </div>
-
           <!-- 饼图 -->
           <div v-if="showPie" class="chart-item">
             <div class="card">
@@ -286,41 +250,6 @@
                 :options="pieOptions"
                 :loading="loading"
               />
-            </div>
-          </div>
-
-          <!-- 热力图 -->
-          <div v-if="showHeatmap" class="chart-item">
-            <div class="card">
-              <div class="card-header">
-                <h3>价差热力图</h3>
-              </div>
-              <chart-card
-                title=""
-                :height="280"
-                :options="heatmapOptions"
-                :loading="loading"
-              />
-            </div>
-          </div>
-
-          <!-- 成交量对比 -->
-          <div v-if="showVolumeChart" class="chart-item">
-            <div class="card">
-              <div class="card-header">
-                <h3>成交量对比</h3>
-              </div>
-              <chart-card
-                v-if="volumeCompareOptions"
-                title=""
-                :height="280"
-                :options="volumeCompareOptions"
-                :loading="loading"
-              />
-              <div v-else class="chart-placeholder">
-                <div class="placeholder-icon">📊</div>
-                <div class="placeholder-text">数据加载中...</div>
-              </div>
             </div>
           </div>
 
@@ -388,10 +317,7 @@ export default {
       dexPool: 'Uniswap V3 (0.3%)',
       cexExchange: 'Binance (0.1%)',
       logScale: false,
-      showRadar: true,
       showPie: true,
-      showHeatmap: true,
-      showVolumeChart: true,
       showSpreadDist: true,
       showCorrelation: true,
 
@@ -559,99 +485,54 @@ export default {
       }
     },
     
-    radarOptions() {
-      if (!this.signals || this.signals.length === 0) return null
-
-      // 计算雷达图指标 (0-10 分)
-      // 1. 价差幅度: 平均价差 / 平均价格 * 100 (basis points)
-      const avgSpread = this.signals.reduce((sum, s) => sum + Math.abs(s.spread), 0) / this.signals.length
-      const avgPrice = this.signals.reduce((sum, s) => sum + (s.cexPrice + s.dexPrice)/2, 0) / this.signals.length
-      const spreadScore = Math.min(10, (avgSpread / avgPrice) * 1000) // 假设1%价差(100bps)为满分
-
-      // 2. 平均套利: 平均净利润
-      const avgProfit = this.signals.reduce((sum, s) => sum + s.netProfit, 0) / this.signals.length
-      const profitScore = Math.min(10, avgProfit / 10) // 假设平均100U利润为满分
-
-      // 3. 交易频率: 信号数量 / 天数 (假设30天)
-      const frequencyScore = Math.min(10, this.signals.length / 30 / 2) // 假设每天20个信号为满分
-
-      // 4. 潜在利润: 总净利润 (对数刻度)
-      const totalProfit = this.signals.reduce((sum, s) => sum + s.netProfit, 0)
-      const totalProfitScore = Math.min(10, Math.log10(totalProfit > 0 ? totalProfit : 1) * 1.5)
-
-      // 5. 市场波动: 暂时用价差标准差代替
-      const spreadVariance = this.signals.reduce((sum, s) => sum + Math.pow(Math.abs(s.spread) - avgSpread, 2), 0) / this.signals.length
-      const spreadStdDev = Math.sqrt(spreadVariance)
-      const volatilityScore = Math.min(10, spreadStdDev / 5) 
-
-      const radarData = [
-        { metric: '价差幅度', value: parseFloat(spreadScore.toFixed(1)) },
-        { metric: '平均套利', value: parseFloat(profitScore.toFixed(1)) },
-        { metric: '交易频率', value: parseFloat(frequencyScore.toFixed(1)) },
-        { metric: '潜在利润', value: parseFloat(totalProfitScore.toFixed(1)) },
-        { metric: '市场波动', value: parseFloat(volatilityScore.toFixed(1)) }
-      ]
-
-      return {
-        responsive: true,
-        maintainAspectRatio: false,
-        tooltip: {
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          borderColor: '#e5e7eb',
-          textStyle: { color: '#111827' },
-          formatter: (params) => {
-            if (!params || !params.data || !params.data.value) return ''
-            const value = params.data.value
-            let result = `${params.seriesName}<br/>`
-            radarData.forEach((item, index) => {
-              result += `${item.metric}: ${value[index]}<br/>`
-            })
-            return result
-          }
-        },
-        radar: {
-          indicator: radarData.map(d => ({
-            name: d.metric,
-            max: 10,
-            color: '#6b7280'
-          })),
-          center: ['50%', '50%'],
-          radius: '70%',
-          axisLine: { lineStyle: { color: '#e5e7eb' } },
-          splitLine: { lineStyle: { color: '#e5e7eb', opacity: 0.5 } },
-          splitArea: {
-            areaStyle: {
-              color: ['rgba(59, 130, 246, 0.05)', 'rgba(255, 255, 255, 0)']
-            }
-          },
-          axisLabel: {
-            show: false
-          },
-          name: {
-            textStyle: {
-              color: '#6b7280',
-              fontSize: 12
-            }
-          }
-        },
-        series: [{
-          type: 'radar',
-          data: [{
-            value: radarData.map(d => d.value),
-            name: '套利指标',
-            lineStyle: { color: '#3b82f6', width: 2 },
-            areaStyle: { color: 'rgba(59, 130, 246, 0.4)' },
-            itemStyle: { color: '#3b82f6' },
-            symbolSize: 6
-          }]
-        }]
-      }
-    },
-    
     pieOptions() {
+      // 从signals数据中统计交易方向分布
+      if (!this.signals || this.signals.length === 0) {
+        return {
+          responsive: true,
+          maintainAspectRatio: false,
+          tooltip: {
+            trigger: 'item',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderColor: '#e5e7eb',
+            textStyle: { color: '#111827' }
+          },
+          series: [{
+            type: 'pie',
+            center: ['50%', '50%'],
+            radius: ['35%', '65%'],
+            data: [
+              { name: '暂无数据', value: 0 }
+            ]
+          }]
+        }
+      }
+
+      // 统计交易方向
+      let uniswapToBinance = 0
+      let binanceToUniswap = 0
+
+      this.signals.forEach(signal => {
+        const direction = signal.direction || ''
+        if (direction.includes('CEX->DEX') || direction.includes('Binance->Uniswap') || direction === 'Long') {
+          binanceToUniswap++
+        } else if (direction.includes('DEX->CEX') || direction.includes('Uniswap->Binance') || direction === 'Short') {
+          uniswapToBinance++
+        } else {
+          // 根据价差判断方向：如果CEX价格 > DEX价格，应该是CEX->DEX
+          if (signal.cexPrice && signal.dexPrice) {
+            if (signal.cexPrice > signal.dexPrice) {
+              binanceToUniswap++
+            } else {
+              uniswapToBinance++
+            }
+          }
+        }
+      })
+
       const directionData = [
-        { name: 'Uniswap → Binance', value: 6 },
-        { name: 'Binance → Uniswap', value: 4 }
+        { name: 'Uniswap → Binance', value: uniswapToBinance },
+        { name: 'Binance → Uniswap', value: binanceToUniswap }
       ]
 
       return {
@@ -702,166 +583,6 @@ export default {
           data: directionData,
           color: ['#10b981', '#f97316']
         }]
-      }
-    },
-    
-    heatmapOptions() {
-      if (!this.spreadData || this.spreadData.length === 0) return null
-
-      const heatmapData = this.generateHeatmapData()
-
-      return {
-        responsive: true,
-        maintainAspectRatio: false,
-        tooltip: {
-          position: 'top',
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          borderColor: '#e5e7eb',
-          textStyle: { color: '#111827' },
-          formatter: (params) => {
-            if (!params.data || !Array.isArray(params.data)) return ''
-            const [hour, minute, value] = params.data
-            return `时间: ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}<br/>Z-Score: ${value.toFixed(2)}`
-          }
-        },
-        grid: {
-          left: '12%',
-          right: '8%',
-          top: '8%',
-          bottom: '15%',
-          containLabel: true
-        },
-        xAxis: {
-          type: 'category',
-          data: this.generateHourLabels(),
-          splitArea: { show: true, areaStyle: { color: ['rgba(0,0,0,0.02)', 'rgba(0,0,0,0.01)'] } },
-          axisLabel: {
-            color: '#6b7280',
-            fontSize: 11,
-            rotate: 0,
-            interval: 2 // 每隔2个显示一个标签，避免拥挤
-          },
-          axisLine: { lineStyle: { color: '#e5e7eb' } },
-          axisTick: { show: false }
-        },
-        yAxis: {
-          type: 'category',
-          data: this.generateMinuteLabels(),
-          splitArea: { show: true, areaStyle: { color: ['rgba(0,0,0,0.02)', 'rgba(0,0,0,0.01)'] } },
-          axisLabel: {
-            color: '#6b7280',
-            fontSize: 11
-          },
-          axisLine: { lineStyle: { color: '#e5e7eb' } },
-          axisTick: { show: false }
-        },
-        visualMap: {
-          min: -3,
-          max: 3,
-          calculable: true,
-          orient: 'horizontal',
-          left: 'center',
-          bottom: '2%',
-          itemWidth: 12,
-          itemHeight: 80,
-          text: ['高', '低'],
-          textStyle: {
-            color: '#6b7280',
-            fontSize: 11
-          },
-          inRange: {
-            color: ['#ef4444', '#f3f4f6', '#10b981']
-          }
-        },
-        series: [{
-          name: 'Z-Score',
-          type: 'heatmap',
-          data: heatmapData,
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 8,
-              shadowColor: 'rgba(0, 0, 0, 0.2)'
-            }
-          }
-        }]
-      }
-    },
-
-    volumeCompareOptions() {
-      if (!this.priceData || !this.priceData.cex || !this.priceData.dex) {
-        return null
-      }
-
-      try {
-        const data = this.priceData.cex.map((d, i) => ({
-          time: d.t,
-          cexVolume: d.v || 0,
-          dexVolume: this.priceData.dex[i]?.v || 0
-        }))
-
-        const timeData = data.map(d => d.time)
-        const cexVolumes = data.map(d => d.cexVolume)
-        const dexVolumes = data.map(d => d.dexVolume)
-
-        return {
-          tooltip: {
-            trigger: 'axis',
-            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-            borderColor: '#e5e7eb',
-            textStyle: { color: '#111827' }
-          },
-          legend: {
-            data: ['CEX成交量', 'DEX成交量'],
-            top: 10,
-            textStyle: { color: '#6b7280' }
-          },
-          grid: {
-            left: '3%',
-            right: '4%',
-            bottom: '3%',
-            top: '15%',
-            containLabel: true
-          },
-          xAxis: {
-            type: 'time',
-            axisLabel: {
-              color: '#6b7280',
-              formatter: (value) => {
-                const date = new Date(value)
-                return `${date.getMonth()+1}/${date.getDate()}`
-              }
-            },
-            axisLine: { lineStyle: { color: '#e5e7eb' } }
-          },
-          yAxis: {
-            type: 'value',
-            name: '成交量',
-            nameTextStyle: { color: '#6b7280' },
-            axisLabel: {
-              color: '#6b7280',
-              formatter: (value) => (value / 1000).toFixed(0) + 'K'
-            },
-            splitLine: { lineStyle: { color: '#f3f4f6' } },
-            axisLine: { lineStyle: { color: '#e5e7eb' } }
-          },
-          series: [
-            {
-              name: 'CEX成交量',
-              type: 'bar',
-              data: cexVolumes.map((v, i) => [timeData[i], v]),
-              itemStyle: { color: '#3b82f6' }
-            },
-            {
-              name: 'DEX成交量',
-              type: 'bar',
-              data: dexVolumes.map((v, i) => [timeData[i], v]),
-              itemStyle: { color: '#10b981' }
-            }
-          ]
-        }
-      } catch (error) {
-        console.error('volumeCompareOptions 计算错误:', error)
-        return null
       }
     },
 
@@ -1310,39 +1031,6 @@ export default {
         const avgSpread = spreads.reduce((a, b) => a + b, 0) / spreads.length
         this.stats.avgSpread = avgSpread.toFixed(2)
       }
-    },
-    
-    generateHeatmapData() {
-      if (!this.spreadData) return []
-      
-      const data = []
-      const grouped = {}
-      
-      this.spreadData.forEach(d => {
-        const date = new Date(d.t)
-        const hour = date.getHours()
-        const minute = Math.floor(date.getMinutes() / 5) * 5
-        const key = `${hour}:${minute}`
-        
-        if (!grouped[key]) grouped[key] = []
-        grouped[key].push(d.z)
-      })
-      
-      Object.keys(grouped).forEach(key => {
-        const [hour, minute] = key.split(':').map(Number)
-        const avgZ = grouped[key].reduce((a, b) => a + b, 0) / grouped[key].length
-        data.push([hour, minute, avgZ])
-      })
-      
-      return data
-    },
-    
-    generateHourLabels() {
-      return Array.from({ length: 24 }, (_, i) => `${i}:00`)
-    },
-    
-    generateMinuteLabels() {
-      return Array.from({ length: 12 }, (_, i) => `${i * 5}m`)
     },
 
     calculateTimeRange(data) {

@@ -54,32 +54,6 @@
           </div>
 
           <div class="param-section">
-            <label class="param-label">
-              时间窗口 (秒)
-              <span class="param-tooltip" title="计算统计指标的时间范围。较短窗口更敏感，较长窗口更稳定">ℹ️</span>
-            </label>
-            <div class="range-input">
-              <input
-                v-model.number="detectorParams.timeWindow[0]"
-                type="number"
-                min="1"
-                class="input"
-                style="width: 48%"
-                @change="onParamsChange"
-              />
-              <span>-</span>
-              <input
-                v-model.number="detectorParams.timeWindow[1]"
-                type="number"
-                min="1"
-                class="input"
-                style="width: 48%"
-                @change="onParamsChange"
-              />
-            </div>
-          </div>
-          
-          <div class="param-section">
             <h4 class="section-title">
               费用设置
               <span class="param-tooltip" title="套利成本计算参数，影响净收益的准确性">ℹ️</span>
@@ -332,7 +306,6 @@ export default {
       detectorParams: {
         priceThreshold: 0.8,
         zScoreThreshold: 2.0,
-        timeWindow: [1, 20],
         volumeMin: 1000,
         fees: {
           cex: 0.001,
@@ -357,7 +330,7 @@ export default {
     ...mapState(['signals']),
     
     sortedSignals() {
-      if (!this.signals) return []
+      if (!this.signals || this.signals.length === 0) return []
       
       const sorted = [...this.signals]
       
@@ -490,7 +463,6 @@ export default {
       this.detectorParams = {
         priceThreshold: 0.8,
         zScoreThreshold: 2.0,
-        timeWindow: [1, 20],
         volumeMin: 1000,
         fees: {
           cex: 0.001,
@@ -505,9 +477,9 @@ export default {
     loadPreset() {
       const presets = {
         conservative: {
-          priceThreshold: 1.5,
-          zScoreThreshold: 3.0,
-          volumeMin: 2000,
+          priceThreshold: 1.0,
+          zScoreThreshold: 2.5,
+          volumeMin: 1500,
           fees: { cex: 0.001, dex: 0.003, gas: 20, slippage: 0.003 }
         },
         balanced: {
@@ -529,6 +501,7 @@ export default {
           ...this.detectorParams,
           ...presets[this.selectedPreset]
         }
+        // 预设加载后重新获取数据
         this.onParamsChange()
       }
     },

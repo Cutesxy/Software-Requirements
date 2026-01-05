@@ -1,14 +1,22 @@
 import Vue from 'vue'
 import VueRouter from 'vue-router'
 import Layout from '@/layout/MainLayout.vue'
+import store from '@/store'
 
 Vue.use(VueRouter)
 
 const routes = [
   {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/Login.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
     path: '/',
     component: Layout,
     redirect: '/overview',
+    meta: { requiresAuth: true },
     children: [
       {
         path: '/overview',
@@ -65,6 +73,47 @@ const routes = [
 const router = new VueRouter({
   mode: 'hash',
   routes
+})
+
+// 路由守卫
+router.beforeEach(async (to, from, next) => {
+  // 检查是否需要认证
+  if (to.matched.some(record => record.meta.requiresAuth)) {
+    // 检查登录状态
+    const isLoggedIn = store.getters.isLoggedIn
+    
+    if (!isLoggedIn) {
+      // 尝试从服务器检查登录状态
+      try {
+        await store.dispatch('checkAuth')
+        const stillNotLoggedIn = !store.getters.isLoggedIn
+        
+        if (stillNotLoggedIn) {
+          // 未登录，跳转到登录页
+          next({
+            path: '/login',
+            query: { redirect: to.fullPath }
+          })
+          return
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error)
+        next({
+          path: '/login',
+          query: { redirect: to.fullPath }
+        })
+        return
+      }
+    }
+  }
+  
+  // 如果已登录且访问登录页，重定向到首页
+  if (to.path === '/login' && store.getters.isLoggedIn) {
+    next('/overview')
+    return
+  }
+  
+  next()
 })
 
 export default router

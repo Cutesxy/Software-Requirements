@@ -26,9 +26,12 @@ Vue.filter('formatTime', function(timestamp, format = 'YYYY-MM-DD HH:mm:ss') {
   return date.toLocaleString('zh-CN')
 })
 
-new Vue({
-  router,
-  store,
-  render: h => h(App)
-}).$mount('#app')
+// 应用启动时检查登录状态
+store.dispatch('checkAuth').then(() => {
+  new Vue({
+    router,
+    store,
+    render: h => h(App)
+  }).$mount('#app')
+})
 

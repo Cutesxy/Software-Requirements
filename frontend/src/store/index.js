@@ -6,6 +6,9 @@ Vue.use(Vuex)
 
 export default new Vuex.Store({
   state: {
+    // 用户认证
+    user: null,
+    isLoggedIn: false,
     // 全局配置
     config: {
       pair: 'ETH/USDT',
@@ -38,6 +41,8 @@ export default new Vuex.Store({
   },
   
   getters: {
+    user: state => state.user,
+    isLoggedIn: state => state.isLoggedIn,
     config: state => state.config,
     priceData: state => state.priceData,
     spreadData: state => state.spreadData,
@@ -46,6 +51,16 @@ export default new Vuex.Store({
   },
   
   mutations: {
+    SET_USER(state, user) {
+      state.user = user
+      state.isLoggedIn = !!user
+    },
+    
+    CLEAR_USER(state) {
+      state.user = null
+      state.isLoggedIn = false
+    },
+    
     SET_CONFIG(state, config) {
       state.config = { ...state.config, ...config }
     },
@@ -85,6 +100,46 @@ export default new Vuex.Store({
   },
   
   actions: {
+    // 用户登录
+    async login({ commit }, { username, password }) {
+      const api = (await import('@/utils/api')).default
+      const result = await api.login({ username, password })
+      if (result.success) {
+        commit('SET_USER', result.user)
+      }
+      return result
+    },
+    
+    // 用户登出
+    async logout({ commit }) {
+      const api = (await import('@/utils/api')).default
+      try {
+        await api.logout()
+      } catch (error) {
+        console.error('Logout error:', error)
+      } finally {
+        commit('CLEAR_USER')
+      }
+    },
+    
+    // 检查登录状态
+    async checkAuth({ commit }) {
+      const api = (await import('@/utils/api')).default
+      try {
+        const result = await api.checkAuth()
+        if (result.logged_in) {
+          commit('SET_USER', result.user)
+        } else {
+          commit('CLEAR_USER')
+        }
+        return result
+      } catch (error) {
+        console.error('Check auth error:', error)
+        commit('CLEAR_USER')
+        return { logged_in: false, user: null }
+      }
+    },
+    
     // 加载价格数据
     async loadPriceData({ commit, state }) {
       commit('SET_LOADING', true)

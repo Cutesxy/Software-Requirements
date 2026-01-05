@@ -1,12 +1,14 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 from datetime import datetime
 import config
 import service
 import ai_service
+import auth
 
 app = Flask(__name__)
-CORS(app)
+app.secret_key = 'your-secret-key-change-in-production'  # 生产环境请更改此密钥
+CORS(app, supports_credentials=True)
 
 def _get_default_dates():
     """
@@ -136,7 +138,127 @@ def ai_chat():
             "functionCall": None
         }), 500
 
+@app.route("/app/auth/login", methods=["POST"])
+def login():
+    """
+    用户登录接口
+    Body: { "username": "admin", "password": "123456" }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求体不能为空"}), 400
+        
+        username = data.get("username", "").strip()
+        password = data.get("password", "")
+        
+        success, message = auth.verify_user(username, password)
+        
+        if success:
+            # 设置会话
+            session['username'] = username
+            session['logged_in'] = True
+            user_info = auth.get_user_info(username)
+            return jsonify({
+                "success": True,
+                "message": message,
+                "user": user_info
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": message
+            }), 401
+        
+    except Exception as e:
+        print(f"Login Error: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"登录失败: {str(e)}"
+        }), 500
+
+@app.route("/app/auth/logout", methods=["POST"])
+def logout():
+    """
+    用户登出接口
+    """
+    try:
+        session.clear()
+        return jsonify({
+            "success": True,
+            "message": "登出成功"
+        })
+    except Exception as e:
+        print(f"Logout Error: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"登出失败: {str(e)}"
+        }), 500
+
+@app.route("/app/auth/register", methods=["POST"])
+def register():
+    """
+    用户注册接口
+    Body: { "username": "newuser", "password": "password123" }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求体不能为空"}), 400
+        
+        username = data.get("username", "").strip()
+        password = data.get("password", "")
+        
+        success, message = auth.create_user(username, password)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": message
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": message
+            }), 400
+        
+    except Exception as e:
+        print(f"Register Error: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"注册失败: {str(e)}"
+        }), 500
+
+@app.route("/app/auth/check", methods=["GET"])
+def check_auth():
+    """
+    检查当前登录状态
+    """
+    try:
+        if session.get('logged_in') and session.get('username'):
+            username = session.get('username')
+            user_info = auth.get_user_info(username)
+            return jsonify({
+                "logged_in": True,
+                "user": user_info
+            })
+        else:
+            return jsonify({
+                "logged_in": False,
+                "user": None
+            })
+    except Exception as e:
+        print(f"Check Auth Error: {e}")
+        return jsonify({
+            "logged_in": False,
+            "user": None
+        })
+
 def main():
+    # 初始化数据库和默认用户
+    auth.init_db()
+    auth.init_default_user()
+    
     print(f"Starting Flask API on port {config.PORT}...")
     app.run(host=config.HOST, port=config.PORT, debug=config.DEBUG)
 

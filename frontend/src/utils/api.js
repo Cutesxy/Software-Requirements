@@ -26,7 +26,8 @@ class ApiClient {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        credentials: 'include'  // 重要：包含 cookies（用于 session）
       })
 
       if (!response.ok) {
@@ -127,6 +128,7 @@ class ApiClient {
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',  // 重要：包含 cookies（用于 session）
         body: JSON.stringify(data)
       })
 
@@ -148,6 +150,54 @@ class ApiClient {
    */
   async chatWithAI(data) {
     return this.postRequest('/app/ai/chat', data)
+  }
+
+  /**
+   * 用户登录
+   * @param {Object} data - { username, password }
+   */
+  async login(data) {
+    return this.postRequest('/app/auth/login', data)
+  }
+
+  /**
+   * 用户登出
+   */
+  async logout() {
+    return this.postRequest('/app/auth/logout', {})
+  }
+
+  /**
+   * 检查登录状态
+   */
+  async checkAuth() {
+    try {
+      const response = await fetch(`${this.baseURL}/app/auth/check`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'  // 重要：包含 cookies
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      console.error('API Request Error [/app/auth/check]:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 用户注册
+   * @param {Object} data - { username, password }
+   */
+  async register(data) {
+    return this.postRequest('/app/auth/register', data)
   }
 }
 

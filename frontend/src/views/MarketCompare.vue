@@ -148,10 +148,6 @@
                 <input type="checkbox" v-model="spreadOptions.logScale" />
                 对数坐标
               </label>
-              <label class="control-switch">
-                <input type="checkbox" v-model="spreadOptions.splitByDirection" />
-                按方向拆分
-              </label>
               <select v-model.number="spreadOptions.binCount" class="control-select">
                 <option :value="20">20 bins</option>
                 <option :value="30">30 bins</option>
@@ -365,7 +361,6 @@ export default {
       spreadOptions: {
         removeOutliers: true,
         logScale: false,
-        splitByDirection: false,
         binCount: 30
       },
 
@@ -634,47 +629,19 @@ export default {
       const bins = this.spreadOptions.binCount
       const binWidth = (max - min) / bins
 
-      // 按方向拆分
-      let series = []
-      if (this.spreadOptions.splitByDirection) {
-        const directions = ['CEX->DEX', 'DEX->CEX', 'Long', 'Short']
-        directions.forEach((dir, idx) => {
-          const dirSpreads = spreads.filter(s => s.direction === dir || 
-            (dir === 'CEX->DEX' && s.direction === 'Long') ||
-            (dir === 'DEX->CEX' && s.direction === 'Short'))
-          
-          if (dirSpreads.length === 0) return
+      // 生成直方图数据
+      const histogram = new Array(bins).fill(0)
+      spreads.forEach(s => {
+        const binIndex = Math.min(Math.floor((s.value - min) / binWidth), bins - 1)
+        histogram[binIndex]++
+      })
 
-          const histogram = new Array(bins).fill(0)
-          dirSpreads.forEach(s => {
-            const binIndex = Math.min(Math.floor((s.value - min) / binWidth), bins - 1)
-            histogram[binIndex]++
-          })
-
-          const data = histogram.map((count, i) => [min + i * binWidth, count])
-          series.push({
-            name: dir,
-            type: 'bar',
-            data: data,
-            itemStyle: { 
-              color: ['#3b82f6', '#10b981', '#f97316', '#8b5cf6'][idx % 4]
-            }
-          })
-        })
-      } else {
-        const histogram = new Array(bins).fill(0)
-        spreads.forEach(s => {
-          const binIndex = Math.min(Math.floor((s.value - min) / binWidth), bins - 1)
-          histogram[binIndex]++
-        })
-
-        const data = histogram.map((count, i) => [min + i * binWidth, count])
-        series.push({
-          type: 'bar',
-          data: data,
-          itemStyle: { color: '#8b5cf6' }
-        })
-      }
+      const data = histogram.map((count, i) => [min + i * binWidth, count])
+      const series = [{
+        type: 'bar',
+        data: data,
+        itemStyle: { color: '#8b5cf6' }
+      }]
 
       // 计算统计线
       const values = spreads.map(s => s.value)
@@ -697,16 +664,11 @@ export default {
           borderColor: '#e5e7eb',
           textStyle: { color: '#111827' }
         },
-        legend: this.spreadOptions.splitByDirection ? {
-          data: series.map(s => s.name),
-          top: 10,
-          textStyle: { color: '#6b7280' }
-        } : undefined,
         grid: {
           left: '3%',
           right: '4%',
           bottom: '3%',
-          top: this.spreadOptions.splitByDirection ? '15%' : '10%',
+          top: '10%',
           containLabel: true
         },
         xAxis: {
@@ -1104,25 +1066,39 @@ export default {
 
         // 调用 AI API 生成总结
         const response = await apiClient.chatWithAI({
-          message: `根据以下数据生成简洁的分析总结（3-4句话）：
+          message: `【任务：生成数据分析总结】
+
+请根据以下统计数据，直接生成一段简洁的数据分析总结（3-4句话），不需要调用任何筛选函数，只需要用自然语言描述分析结果。
+
+【重要】这是一个文本生成任务，请直接输出分析总结文本，不要尝试筛选数据或调用函数。
+
 分析参数：
-- 开始时间：${this.params.startDate}
-- 结束时间：${this.params.endDate}
+- 时间范围：${this.params.startDate} 至 ${this.params.endDate}
 - Z-Score 阈值：${this.params.zThreshold}
 - 交易规模：${this.params.tradeSize} USDT
 
-数据统计：
-- 信号总数：${stats.signalCount}
+数据统计结果：
+- 信号总数：${stats.signalCount} 个
 - 平均净利润：${stats.avgProfit.toFixed(2)} USDT
 - 胜率：${(stats.winRate * 100).toFixed(2)}%
 - 平均价差：${stats.avgSpread.toFixed(2)} USDT
 - 信号高发时段：${maxHour}:00
 - 极值出现日期：${maxDate || '无'}
 
-请生成类似这样的总结：
-"本周期检测到 X 次信号，平均净利润 X USDT，胜率 X%。"
-"信号高发时段集中在 X:00–X:00；极值主要出现在 X/X 与 X/X。"
-"建议阈值从 Z=X 调到 X，可减少噪声信号约 X%。"`,
+请生成分析总结，格式示例：
+"本周期检测到 ${stats.signalCount} 次套利信号，平均净利润 ${stats.avgProfit.toFixed(2)} USDT，胜率为 ${(stats.winRate * 100).toFixed(2)}%。"
+"信号高发时段集中在 ${maxHour}:00 附近；${maxDate ? `极值主要出现在 ${maxDate}` : '无明显极值日期'}。"
+"${stats.signalCount > 0 ? `建议关注 ${maxHour}:00 时段的套利机会，该时段信号密度较高。` : '当前参数下未检测到有效信号，建议调整阈值或扩大时间范围。'}"
+
+【参数调整建议】
+请根据当前参数和统计结果，用一句话提出参数调整建议。考虑因素：
+- 如果信号数量过少（<10个），建议降低 Z-Score 阈值或扩大时间范围
+- 如果信号数量过多（>100个），建议提高 Z-Score 阈值以筛选更高质量信号
+- 如果胜率较低（<50%），建议提高 Z-Score 阈值
+- 如果平均净利润较低，建议调整交易规模或提高 Z-Score 阈值
+- 如果信号数量适中且质量良好，可以建议保持当前参数或微调
+
+请用一句话总结参数调整建议，例如："建议将 Z-Score 阈值调整为 2.5 以获取更多信号" 或 "当前参数设置合理，建议保持"。`,
           context: { 
             page: 'MarketCompare',
             params: {

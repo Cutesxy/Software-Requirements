@@ -15,7 +15,7 @@
 ```bash
 cd frontend
 npm install
-npm run serve
+npm run dev
 ```
 
 访问 http://localhost:8080
@@ -23,7 +23,7 @@ npm run serve
 ### 后端
 
 ```bash
-cd backend/Software-Requirements/backend
+cd backend
 pip install -r requirements.txt
 python api.py
 ```
